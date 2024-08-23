@@ -6,9 +6,7 @@ from solana_snipping.config import get_config
 
 
 cfg = get_config()
-# bot = Bot(cfg["telegram"]["token"])
-bot = Bot(os.environ["BOT_TOKEN"])
-
+bot = Bot(cfg["telegram"]["token"])
 
 async def send_msg_log(message: str):
     if len(message) > 4096:
