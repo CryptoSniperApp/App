@@ -292,7 +292,8 @@ class RadiumPool(SolscanAPI):
                     await asyncio.sleep(10)
                     continue
                 except Exception as e:
-                    print(logger.exception(e))
+                    pass
+                    # print(logger.exception(e))
                 
                 try:
                     if isinstance(self.client, aiohttp.ClientSession):
