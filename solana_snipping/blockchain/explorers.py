@@ -306,8 +306,8 @@ class RadiumPool(SolscanAPI):
                     
                     print(f"we get {len(response["data"])} transfers")
                     
-                    async def check_mint(mint: str):
-                        nonlocal self
+                    for block in response["data"]:
+                        mint = block["token_address"]
 
                         if mint in bmints or mint in self._cached or mint in list(checked_mints):
                             return
@@ -315,16 +315,14 @@ class RadiumPool(SolscanAPI):
                         count = await self.get_count_transfers(mint)
                         checked_mints.add(mint)
                         print(f"{mint}: {count} transfers")
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(1)
                         if count > max_transfers:
                             return
                         
                         await q.put(mint)
                         self._cached.append(mint)
                         
-                    tasks = [check_mint(block["token_address"]) for block in response["data"]]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    await asyncio.sleep(10)
+                    await asyncio.sleep(5)
                 except Exception as e:
                     pass
                     # print(logger.exception(e))
