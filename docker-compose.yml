@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      - .:/app
