@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 import aiohttp
 import httpx
 from loguru import logger
-from proxy_pool import get_full_pool
 
 from solana_snipping.tg import send_msg_log
 
