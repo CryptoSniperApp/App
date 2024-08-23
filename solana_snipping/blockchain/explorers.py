@@ -309,14 +309,14 @@ class RadiumPool(SolscanAPI):
                         mint = block["token_address"]
 
                         if mint in bmints or mint in self._cached or mint in list(checked_mints):
-                            return
+                            continue
 
                         count = await self.get_count_transfers(mint)
                         checked_mints.add(mint)
                         print(f"{mint}: {count} transfers")
                         await asyncio.sleep(1)
                         if count > max_transfers:
-                            return
+                            continue
                         
                         await q.put(mint)
                         self._cached.append(mint)
