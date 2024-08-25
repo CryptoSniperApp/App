@@ -572,7 +572,7 @@ async def solscan_():
 
 
 async def main():
-    # return await solscan_()
+    return await solscan_()
     # token_addrs = await parse_transaction()
 
     # for addr in token_addrs:
@@ -650,3 +650,24 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
+"""
+on https://jup.ag/va/EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm-USDT
+
+
+curl 'https://public-api.birdeye.so/defi/ohlcv/base_quote?base_address=EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm&quote_address=Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB&type=1m&time_from=1724450367&time_to=1724487207' \
+  -H 'accept: */*' \
+  -H 'accept-language: ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7,my;q=0.6' \
+  -H 'origin: https://jup.ag' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://jup.ag/' \
+  -H 'sec-ch-ua: "Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "Linux"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' \
+  -H 'x-api-key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE2NzI5MDEwNzZ9.c66gFnI20ymHoPWapB0JgISzqDIK6Q_Zg0oAVp8Ssyc'
+"""

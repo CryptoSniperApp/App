@@ -8,7 +8,7 @@ class JupiterAPI:
     def __init__(self) -> None:
         self.client = httpx.AsyncClient()
 
-    async def get_swap_info(self, token1: str, token2: str, amount: int = 50):
+    async def get_swap_info(self, token1: str, token2: str, amount: int = 50, swap_mode: str = "ExactIn"):
         headers = {
             "accept": "*/*",
             "accept-language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7,my;q=0.6",
@@ -30,7 +30,7 @@ class JupiterAPI:
             "amount": amount * 1_000_000,
             "slippageBps": "300",
             "computeAutoSlippage": "true",
-            "swapMode": "ExactIn",
+            "swapMode": swap_mode,
             "onlyDirectRoutes": "false",
             "asLegacyTransaction": "false",
             "maxAccounts": "64",

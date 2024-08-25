@@ -10,4 +10,4 @@ RUN poetry install --no-root --no-interaction --no-ansi
 
 COPY . /app/
 
-ENTRYPOINT python solana_snipping/blockchain/explorers.py
+ENTRYPOINT python solana_snipping/blockchain/pools.py
