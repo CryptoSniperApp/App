@@ -7,6 +7,7 @@ import traceback
 from typing import Literal
 import httpx
 from loguru import logger
+import loguru
 from solana.rpc.async_api import AsyncClient
 from solders.signature import Signature
 import websockets
@@ -222,8 +223,12 @@ async def process_mint(mint: str, dt: datetime):
 async def strategy():
     async for signature, time in get_newest_token_transactions_from_raydium_pool():
         print(signature, time)
-        mint = await process_transaction(signature)
-        await process_mint(mint, time)
+        try:
+            mint = await process_transaction(signature)
+            await process_mint(mint, time)
+        except Exception as e:
+            logger.exception(e)
+
 
 async def main():
     return await strategy()
