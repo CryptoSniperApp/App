@@ -68,7 +68,7 @@ class RadiumAPI:
         params = {
             "inputMint": token1,
             "outputMint": token2,
-            "amount": amount * 1_000_000,
+            "amount": str(amount * 1_000_000).replace(".", ""),
             "slippageBps": "50",
             "txVersion": "V0",
         }
