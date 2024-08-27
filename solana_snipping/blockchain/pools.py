@@ -16,6 +16,7 @@ import websockets.connection
 import websockets.exceptions
 
 from solana_snipping.constants import SOL_ADDR
+from solana_snipping.external.dex import RadiumAPI
 from solana_snipping.tg import send_msg_log
 
 pool_account_address = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
@@ -171,15 +172,13 @@ async def swap_on_jupiter(
     amount=1,
     swap_mode: Literal["ExactOut", "ExactIn"] = "ExactIn",
 ):
-    from solana_snipping.external.dex import JupiterAPI
-
-    response = await JupiterAPI().get_swap_info(
-        mint1, mint2, amount=amount, swap_mode=swap_mode
+    response = await RadiumAPI().get_swap_info(
+        mint1, mint2, amount=amount
     )
-    if response.get("error"):
+    if not response.get("success"):
         return f"raw error: {response}"
     
-    price = response["inAmount"] if swap_mode == "ExactIn" else response["outAmount"]
+    price = response["data"]["outputAmount"]
     decimals = 9
     result = decimal.Decimal(float(price) / int("1" + "0" * decimals))
     return round(result, decimals)
