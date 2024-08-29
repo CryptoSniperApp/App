@@ -195,20 +195,27 @@ async def get_first_liquidity_add_value(trans: str) -> float:
     return round(full_price, 2)
 
 
-async def get_token_from_transactions_from_blockchain(sig: str) -> str:
+async def get_token_from_transactions_from_blockchain(sig: str) -> list[str, str, str]:
     resp = await client.get_transaction(
-        Signature.from_string(sig), max_supported_transaction_version=0
+        Signature.from_string(sig), max_supported_transaction_version=0,
+        encoding="jsonParsed"
     )
-    response = resp.to_json()
-    data = json.loads(response)
 
     solmint = "So111111111111111111111111111111111"
     try:
-        return [
-            obj["mint"]
-            for obj in data["result"]["meta"]["preTokenBalances"]
-            if not obj["mint"].count(solmint)
-        ][0]
+        instructions = resp.value.transaction.transaction.message.instructions
+        accounts = [i.accounts for i in instructions if str(i.program_id) == '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8'][0]
+        token1 = accounts[8].__str__()
+        token2 = accounts[9].__str__()
+        pair = accounts[4].__str__()
+        
+        tokens = [token1, token2]
+        if tokens[0].count(solmint):
+            tokens.reverse()
+            
+        tokens.append(pair)
+            
+        return tokens
     except (KeyError, IndexError, AttributeError) as e:
         return ""
 
@@ -354,16 +361,16 @@ async def swap_on_jupiter(
 
 
 async def process_transaction(signature: str):
-    mint = await get_token_from_transactions_from_blockchain(sig=signature)
+    mint, token2, pair = await get_token_from_transactions_from_blockchain(sig=signature)
     if not mint:
         with open("failed_transactions.txt", "a") as f:
             f.write(f"{signature}\n\n")
         return
 
-    return mint
+    return mint, token2, pair
 
 
-async def process_mint(mint: str, dt: datetime, signature_trans: str):
+async def process_mint(mint: str, dt: datetime, signature_trans: str, pool_id: str, token2: str):
     try:
         # pool_raydium = await get_liquidity_from_pool(mint)
         pool_raydium = await get_first_liquidity_add_value(signature_trans)
@@ -372,7 +379,7 @@ async def process_mint(mint: str, dt: datetime, signature_trans: str):
         pool_raydium = None
 
     try:
-        volume_of_pool = await get_volume_of_pool(signature_trans)
+        volume_of_pool = await RadiumAPI().get_liquidity_from_pool(pool_id)
         if volume_of_pool:
             volume_of_pool = format_number(volume_of_pool)
     except Exception as e:
@@ -403,8 +410,8 @@ async def strategy():
     async for signature, time in get_newest_token_transactions_from_raydium_pool():
         print(signature, time)
         try:
-            mint = await process_transaction(signature)
-            await process_mint(mint, time, signature)
+            mint, token2, pair = await process_transaction(signature)
+            await process_mint(mint, time, signature, pair, token2=token2)
         except Exception as e:
             logger.exception(e)
 
@@ -414,7 +421,7 @@ async def main():
     # mint = "5FdLfn2yx2b4x3WULG9oXw3zigj3gTx8ZBcQWZ59YbkY"
     # print(await swap_on_jupiter(mint1=mint))
 
-    # sig = "4zhGEuEu4iyS313Ez4TJw3YkLHNkQVgnDVesgF5LtEyvzNmYYjyzMo3mC3RC9xPRdWhrNeAASpBeYPE3GsxfQLEH"
+    # sig = "2HYbGQ843hMs5rQqySRNKqpHiMygmGt8WVygxwEid52Zx5UPxhXT8CHD4MAuNW9pNajBLkvuccCLCvJJyYxhJ8yK"
     # time = datetime.now()
     # mint = await process_transaction(sig)
     # await process_mint(mint, time, sig)
