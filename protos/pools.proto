@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+message ResponsePoolState {
+    int32 baseDecimal = 1;
+    int32 quoteDecimal = 2;
+
+    string baseTokenAmount = 3;
+    string quoteTokenAmount = 4;
+
+    string poolAddress = 5;
+    string baseTokenAddress = 6;
+    string quoteTokenAddress = 7;
+
+    string baseMint = 8;
+    string quoteMint = 9;
+}
+
+
+message ErrorMesssage {
+    string error = 1;
+}
+
+
+message RequestPoolState {
+    string poolAddress = 1;
+}
+
+
+message ResponsePoolStateOperation {
+    ErrorMesssage error = 1;
+    ResponsePoolState data = 2;
+}
+
+
+service PoolState {
+    rpc getPoolState(RequestPoolState) returns (ResponsePoolStateOperation);
+}
+

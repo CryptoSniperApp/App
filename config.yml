@@ -1,3 +1,23 @@
 telegram:
   token: $BOT_TOKEN
   chat_id: -4568392513
+
+
+chains:
+  solana:
+    networks:
+      mainnet-beta: 
+        websocket: 
+          "wss://api.mainnet-beta.solana.com"
+        rpc:
+          "https://api.mainnet-beta.solana.com"
+    dexes:
+      raydium:
+        amm_address:
+          "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+
+
+microservices:
+  raydium:
+    host: $GRPC_HOST_RAYDIUM|127.0.0.1
+    port: $GRPC_PORT_RAYDIUM|50051

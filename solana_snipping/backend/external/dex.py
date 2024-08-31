@@ -1,6 +1,6 @@
 import httpx
 
-from solana_snipping.constants import USDT_ADDR
+from solana_snipping.common.constants import USDT_ADDR
 
 
 class JupiterAPI:

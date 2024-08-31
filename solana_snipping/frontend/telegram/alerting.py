@@ -3,7 +3,7 @@ from aiogram import Bot
 from aiogram.types import FSInputFile, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from solana_snipping.config import get_config
+from solana_snipping.common.config import get_config
 
 
 cfg = get_config()

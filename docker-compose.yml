@@ -7,6 +7,20 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - GRPC_HOST_RAYDIUM=raydium_microservice
+      - GRPC_PORT_RAYDIUM=50051
 
     volumes:
-      - .:/app
+      - ./solana_snipping:/app/solana_snipping
+    
+    # command: poetry run python solana_snipping/backend/solana/raydium/__init__.py
+
+    depends_on:
+      - raydium_microservice
+
+    restart: always
+  
+  raydium_microservice:
+    build:
+      context: .
+      dockerfile: Dockerfile.ts

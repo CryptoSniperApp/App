@@ -22,6 +22,13 @@ plotly = "^5.23.0"
 mplfinance = "^0.12.10b0"
 bs4 = "^0.0.2"
 lxml = "^5.3.0"
+sqlalchemy = "^2.0.32"
+aiosqlite = "^0.20.0"
+orjson = "^3.10.7"
+ua-generator = "^1.0.4"
+betterproto = {extras = ["compiler"], version = "^1.2.5"}
+grpcio-tools = "^1.66.1"
+pydantic = "^2.8.2"
 
 
 [build-system]
