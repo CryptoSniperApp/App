@@ -10,7 +10,6 @@ __pycache__/
 .env
 *.log
 *.txt
-*.json
 .vscode
 poetry.lock
 
