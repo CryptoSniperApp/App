@@ -87,7 +87,10 @@ async def process_mint(
         min_percents=200,
         max_percents=20,
     )
-    await coro
+    task = asyncio.create_task(coro)
+    task
+    await asyncio.sleep(3)
+    
 
 
 async def solana_strategy():
