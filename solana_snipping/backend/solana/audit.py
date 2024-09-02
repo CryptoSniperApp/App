@@ -1,5 +1,8 @@
 import httpx
 
+from solders.pubkey import Pubkey # type: ignore
+from solana_snipping.common.constants import solana_async_client
+
 
 class RugCheckAPI:
     """
@@ -40,3 +43,14 @@ class RugCheckAPI:
         if not response.get("risks"):
             return None
         return len(response["risks"])
+
+
+class WalletAudit:
+    
+    def __init__(self) -> None:
+        self._solclient = solana_async_client
+    
+    async def get_finalized_signatures(self, wallet_addr: str):
+        pub = Pubkey.from_string(wallet_addr)
+        resp = await self._solclient.get_signatures_for_address(pub, commitment="finalized")
+        return resp.value

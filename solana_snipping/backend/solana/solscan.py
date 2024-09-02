@@ -2,6 +2,7 @@ import decimal
 import httpx
 
 from solana_snipping.backend.utils import append_hdrs
+from solana_snipping.common.constants import WSOL_ADDR
 
 
 class Solscan:
@@ -60,6 +61,10 @@ class Solscan:
             for k, v in obj.items():
                 if k not in ["token_amount", "number", "decimals", "token_address"]:
                     continue
+                
+                if obj["token_amount"]["token_address"] != WSOL_ADDR:
+                    continue
+                
                 amount = v["number"]
                 decimals = v["decimals"]
                 tokens = decimal.Decimal(float(amount) / int("1" + "0" * decimals))
@@ -86,7 +91,8 @@ class Solscan:
 
 async def main():
     solscan = Solscan()
-    print(await solscan.get_tvl_of_pool("6gPS4rFw6s1RVNRv7mHrvirEeUxbjhv5Hgbdoxe4EdhS"))
+    # print(await solscan.get_tvl_of_pool("C47dSSMTUTjphq9QS1CAUsBfQGuPzNr6EUBSTz6Z1aQc"))
+    print(await solscan.get_added_liquidity_value("4TU6bGgQPcpH4EGnpWx5FRCqNuvAaGcrrLpS8Mf6rCekNSyHinR9JQhNsZEMx7KyzjScrqPpZXPSCCRTet91X5oQ"))
     ...
 
 

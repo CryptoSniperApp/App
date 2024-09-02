@@ -33,6 +33,7 @@ export async function parsePoolInfo(poolAddress: string): Promise<PoolInfo> {
     const info = await connection.getAccountInfo(new PublicKey(poolAddress));
     if (!info) return { "success": false };
     const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(info.data);
+    console.log(poolState);
     const baseDecimal = poolState.baseDecimal.toNumber();
     const quoteDecimal = poolState.quoteDecimal.toNumber();
 

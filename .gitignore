@@ -12,6 +12,7 @@ __pycache__/
 *.txt
 .vscode
 poetry.lock
+node_modules/
 
 # Distribution / packaging
 .Python

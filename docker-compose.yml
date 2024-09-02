@@ -7,20 +7,29 @@ services:
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
-      - GRPC_HOST_RAYDIUM=raydium_microservice
-      - GRPC_PORT_RAYDIUM=50051
 
     volumes:
-      - ./solana_snipping:/app/solana_snipping
-    
-    # command: poetry run python solana_snipping/backend/solana/raydium/__init__.py
+      - .:/app
 
     depends_on:
-      - raydium_microservice
+      raydium_microservice:
+        condition: service_healthy
 
-    restart: always
+    restart: on-failure
   
   raydium_microservice:
     build:
       context: .
       dockerfile: Dockerfile.ts
+    
+    ports:
+      - 50051:5051
+    
+    # command: curl --help
+
+    healthcheck:
+      test: nc -z -w 1 127.0.0.1 50051
+      interval: 30s
+      timeout: 3s
+      retries: 7
+      start_period: 7s
