@@ -85,7 +85,7 @@ async def process_mint(
         capture_time=capture_time,
         first_added_liquidity=float(first_added_liquidity),
         min_percents=200,
-        max_percents=5,
+        max_percents=20,
     )
     await coro
 
@@ -122,7 +122,7 @@ async def solana_strategy():
         logger.info(f"{signature} - {dt}")
 
         try:
-            await asyncio.shield()
+            await process(signature, dt)
         except Exception as e:
             logger.exception(e)
 
