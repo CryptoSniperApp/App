@@ -18,7 +18,7 @@ class FiltersRaydiumPools:
             self._client.get_signer_of_transaction(signature=signature)
         )
         
-        if liquidity <= 10.000:
+        if liquidity <= 10_000:
             return False
 
         thxs = await self._client.wallet_auditor.get_finalized_signatures(
