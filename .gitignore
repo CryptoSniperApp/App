@@ -13,6 +13,7 @@ __pycache__/
 .vscode
 poetry.lock
 node_modules/
+*.csv
 
 # Distribution / packaging
 .Python

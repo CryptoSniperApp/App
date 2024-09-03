@@ -75,7 +75,7 @@ async def process_mint(
     await send_msg_log(message, mint, trans=signature_trans)
 
     monitor = SolanaMonitor()
-    minutes_watch = 15
+    minutes_watch = 10 * 60  # 10 hours
     coro = monitor.watch_pool(
         mint1=mint,
         mint2=token2,
