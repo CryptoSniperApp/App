@@ -111,7 +111,7 @@ class SolanaMonitor:
                             # We are leave from market with token :-(
                             return
 
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(3)
             except solana.exceptions.SolanaRpcException:
                 await asyncio.sleep(5)
                 continue

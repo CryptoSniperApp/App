@@ -49,6 +49,7 @@ class ReadableAnalytic:
                 "Адрес Токена": token,
                 "Кол-во токенов при первой покупке за 0.77 SOL": amount_start,
                 "Минимальное кол-во токенов за 0.77 SOL": min_amount,
+                "Разница в %": round((amount_start - min_amount) / min_amount * 100, 2),
                 "Первая ликвидность": first_liquidity,
                 "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M %d.%m.%Y"),
                 "Время максимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M %d.%m.%Y"),
