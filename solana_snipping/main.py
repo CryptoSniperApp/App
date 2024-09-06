@@ -37,11 +37,14 @@ async def process_mint(
 
     proxies = get_proxies()
     proxy = random.choice(proxies)
+    
+    first_added_liquidity = None
     try:
-        first_added_liquidity = await solana.solscan.get_added_liquidity_value(
-            signature_trans, proxy=proxy
-        )
-        pool_raydium = format_number_decimal(first_added_liquidity)
+        for _proxy in [None, proxy]:
+            first_added_liquidity = await solana.solscan.get_added_liquidity_value(
+                signature_trans, proxy=_proxy
+            )
+            pool_raydium = format_number_decimal(first_added_liquidity)
     except Exception as e:
         logger.exception(e)
         pool_raydium = None
@@ -55,13 +58,14 @@ async def process_mint(
 
     try:
         decimals = await solana.get_token_decimals(mint_addr=mint)
-        price = await raydium.get_swap_price(
-            mint1=mint, mint2=SOL_ADDR, decimals=decimals, proxy=proxy
-        )
-        if isinstance(price, str):
-            raise ValueError
+        for _proxy in [None, proxy]:
+            price = await raydium.get_swap_price(
+                mint1=mint, mint2=SOL_ADDR, decimals=decimals, proxy=_proxy
+            )
+            if isinstance(price, str):
+                raise ValueError
 
-        price = format_number_decimal(price)
+            price = format_number_decimal(price)
     except Exception as e:
         logger.exception(e)
         price = "Не удалось получить цену"
@@ -86,7 +90,7 @@ async def process_mint(
         signature_transaction=signature_trans,
         seconds_stop=60 * minutes_watch,
         capture_time=capture_time,
-        first_added_liquidity=float(first_added_liquidity),
+        first_added_liquidity=float(first_added_liquidity) if first_added_liquidity else None,
         min_percents=200,
         max_percents=20,
     )

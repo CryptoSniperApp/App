@@ -40,95 +40,137 @@ class SolanaMonitor:
         if not capture_time:
             capture_time = datetime.now()
 
+        proxies = get_proxies()
+        swap_price_first = None
+        pool_open_time = None
+        attempts = 0
+        
         while True:
             try:
                 proxies = get_proxies()
                 proxy = random.choice(proxies)
 
                 if not first_added_liquidity:
-                    first_added_liquidity = (
-                        await self._chain.solscan.get_added_liquidity_value(
-                            trans=signature_transaction, proxy=proxy
+                    for _proxy in [None, proxy]:
+                        first_added_liquidity = (
+                            await self._chain.solscan.get_added_liquidity_value(
+                                trans=signature_transaction, proxy=_proxy
+                            )
                         )
-                    )
 
-                # try:
                 pool_open_time = await self._chain.get_transaction_time(
                     signature=signature_transaction
                 )
+                
+                for _proxy in [None, proxy]:
+                    swap_price_first = await self._chain.raydium.get_swap_price(
+                        mint1=mint1,
+                        mint2=SOL_ADDR,
+                        decimals=9,
+                        amount=0.77,
+                        base_out=True,
+                        proxy=_proxy,
+                    )
+                
+                attempts = 0
+                    
+            except solana.exceptions.SolanaRpcException:
+                attempts += 1
+                await asyncio.sleep(5)
+                continue
+            except Exception as e:
+                attempts += 1
+                logger.exception(e)
+                await asyncio.sleep(2)
+            finally:
+                if swap_price_first:
+                    break
+                elif attempts >= 7:
+                    return
 
-                swap_price_first = await self._chain.raydium.get_swap_price(
-                    mint1=mint1,
-                    mint2=SOL_ADDR,
-                    decimals=9,
-                    amount=0.77,
-                    base_out=True,
-                    proxy=proxy,
-                )
+        async with dbsession() as session:
+            repo = AnalyticRepository(session)
+            solana_exc_count = 0
+            exc_count = 0
+            while True:
+                try:
+                    proxies = get_proxies()
+                    if time.time() - start >= seconds_stop:
+                        return
 
-                async with dbsession() as session:
-                    repo = AnalyticRepository(session)
-                    while True:
-                        if time.time() - start >= seconds_stop:
-                            return
-
-                        swap_time = datetime.now()
+                    swap_time = datetime.now()
+                    for _proxy in [None, proxy]:
                         swap_price = await self._chain.raydium.get_swap_price(
                             mint1=mint1,
                             mint2=SOL_ADDR,
                             decimals=9,
                             amount=0.77,
                             base_out=True,
-                            proxy=proxy
+                            proxy=_proxy
                         )
-                        if type(swap_price) not in (float, decimal.Decimal):
-                            await asyncio.sleep(3)
-                            continue
+                    if type(swap_price) not in (float, decimal.Decimal):
+                        await asyncio.sleep(5)
+                        continue
+                    
+                    solana_exc_count = 0
+                    percentage_diff = float(
+                        (swap_price - swap_price_first) / swap_price_first * 100
+                    )
 
-                        percentage_diff = float(
-                            (swap_price - swap_price_first) / swap_price_first * 100
+                    data = AnalyticData(
+                        time=time.time(),
+                        pool_addr=pool_id,
+                        mint1_addr=mint1,
+                        mint2_addr=mint2,
+                        capture_time=capture_time.timestamp(),
+                        swap_price=swap_price,
+                        swap_time=swap_time.timestamp(),
+                        percentage_difference=percentage_diff
+                    )
+                    
+                    if pool_open_time:
+                        data.pool_open_time = pool_open_time.timestamp()
+                    if first_added_liquidity:
+                        data.first_added_liquiduty_value = first_added_liquidity
+
+                    logger.info(
+                        f"Swap price: {swap_price}, first swap price: {swap_price_first}. Percentage diff: {percentage_diff}"
+                    )
+                    await repo.add_analytic(model=data)
+                    exc_count = 0
+
+                    if percentage_diff >= max_percents:
+                        # We are sell token
+                        logger.success(
+                            f"We are swap token {mint1} on 0.77 SOL "
+                            f"(~100 USD)"
                         )
+                        return
 
-                        data = AnalyticData(
-                            time=time.time(),
-                            pool_addr=pool_id,
-                            mint1_addr=mint1,
-                            mint2_addr=mint2,
-                            first_added_liquiduty_value=first_added_liquidity,
-                            capture_time=capture_time.timestamp(),
-                            pool_open_time=pool_open_time.timestamp(),
-                            swap_price=swap_price,
-                            swap_time=swap_time.timestamp(),
-                            percentage_difference=percentage_diff
+                    elif (
+                        percentage_diff < 0
+                        and (percentage_diff * -1) >= min_percents
+                    ):
+                        # We are leave from market with token :-(
+                        logger.warning(
+                            "We leave from monitor because percentage"
+                            f" difference: {percentage_diff}"
                         )
+                        return
 
-                        print(
-                            f"Swap price: {swap_price}, first swap price: {swap_price_first}. Percentage diff: {percentage_diff}"
-                        )
-                        await repo.add_analytic(model=data)
-
-                        if percentage_diff >= max_percents:
-                            # We are sell token
-                            logger.success(
-                                f"We are swap token {mint1} on 0.77 SOL "
-                                f"(~100 USD)"
-                            )
-                            return
-
-                        elif (
-                            percentage_diff < 0
-                            and (percentage_diff * -1) >= min_percents
-                        ):
-                            # We are leave from market with token :-(
-                            return
-
-                        await asyncio.sleep(3)
-            except solana.exceptions.SolanaRpcException:
-                await asyncio.sleep(5)
-                continue
-            except Exception as e:
-                logger.exception(e)
-                await asyncio.sleep(2)
+                    await asyncio.sleep(3)
+                    
+                except solana.exceptions.SolanaRpcException:
+                    await asyncio.sleep(5)
+                    solana_exc_count += 1
+                    continue
+                except Exception as e:
+                    exc_count += 1
+                    logger.exception(e)
+                    await asyncio.sleep(2)
+                finally:
+                    if solana_exc_count >= 5 or exc_count >= 5:
+                        return
 
 
 async def main():
