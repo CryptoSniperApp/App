@@ -108,6 +108,7 @@ class SolanaMonitor:
                             base_out=True,
                             proxy=_proxy
                         )
+                    logger.info(f"swap price - {swap_price}. token - {mint1}")
                     if type(swap_price) not in (float, decimal.Decimal):
                         await asyncio.sleep(5)
                         continue
@@ -134,7 +135,7 @@ class SolanaMonitor:
                         data.first_added_liquiduty_value = first_added_liquidity
 
                     logger.info(
-                        f"Swap price: {swap_price}, first swap price: {swap_price_first}. Percentage diff: {percentage_diff}"
+                        f"Swap price: {swap_price}, first swap price: {swap_price_first}. Percentage diff: {percentage_diff}. mint - {mint1}"
                     )
                     await repo.add_analytic(model=data)
                     exc_count = 0
