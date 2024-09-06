@@ -91,6 +91,7 @@ class RaydiumAPI:
         amount: int | float = 1,
         decimals: int = 9,
         base_out: bool = False,
+        proxy: str = None,
     ):
         decimals = 9
         params = {
@@ -102,11 +103,13 @@ class RaydiumAPI:
         }
 
         endpoint = "swap-base-out" if base_out else "swap-base-in"
-        resp = await self._http_client.get(
-            f"https://transaction-v1.raydium.io/compute/{endpoint}",
-            params=params,
-            headers=self._base_hdrs,
-        )
+        async with httpx.AsyncClient(proxy=proxy) as client:
+            resp = await client.get(
+                f"https://transaction-v1.raydium.io/compute/{endpoint}",
+                params=params,
+                headers=self._base_hdrs,
+            )
+
         return resp.json()
 
     async def get_swap_price(
@@ -116,14 +119,24 @@ class RaydiumAPI:
         decimals: int,
         amount: int | float = None,
         base_out: bool = False,
+        proxy: str = None,
     ) -> float | str:
         response = await self.get_swap_info(
-            mint1, mint2, amount=amount or 1, decimals=decimals, base_out=base_out
+            mint1,
+            mint2,
+            amount=amount or 1,
+            decimals=decimals,
+            base_out=base_out,
+            proxy=proxy,
         )
         if not response.get("success"):
             return f"raw error: {response}"
 
-        price = response["data"]["inputAmount"] if base_out else response["data"]["outputAmount"]
+        price = (
+            response["data"]["inputAmount"]
+            if base_out
+            else response["data"]["outputAmount"]
+        )
         result = decimal.Decimal(float(price) / int("1" + "0" * decimals))
         return round(result, decimals)
 

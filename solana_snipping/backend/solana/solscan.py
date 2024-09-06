@@ -44,16 +44,18 @@ class Solscan:
 
         return response["data"]["tvl"] * 2
 
-    async def _raw_trans_detail_info(self, trans_id: str):
+    async def _raw_trans_detail_info(self, trans_id: str, proxy: str = None):
         headers = self._base_hdrs
         params = {"tx": trans_id}
         url = "https://api-v2.solscan.io/v2/transaction/detail"
 
-        resp = await self._client.get(url, headers=headers, params=params)
+        async with httpx.AsyncClient(proxy=proxy) as client:
+            resp = await client.get(url, headers=headers, params=params)
+
         return resp.json()
 
-    async def get_added_liquidity_value(self, trans: str) -> float:
-        response = await self._raw_trans_detail_info(trans_id=trans)
+    async def get_added_liquidity_value(self, trans: str, proxy: str = None) -> float:
+        response = await self._raw_trans_detail_info(trans_id=trans, proxy=proxy)
         summary_actions = response["data"]["render_summary_main_actions"]
 
         full_price = 0
@@ -68,7 +70,9 @@ class Solscan:
                 amount = v["number"]
                 decimals = v["decimals"]
                 tokens = decimal.Decimal(float(amount) / int("1" + "0" * decimals))
-                market_resp = await self._raw_solscan_market(v["token_address"])
+                market_resp = await self._raw_solscan_market(
+                    v["token_address"], proxy=proxy
+                )
                 try:
                     full_price += market_resp["data"][v["token_address"]][
                         "price"
@@ -78,21 +82,26 @@ class Solscan:
 
         return round(full_price, 2)
 
-    async def _raw_solscan_market(self, *mint_addrs):
+    async def _raw_solscan_market(self, *mint_addrs, proxy: str = None):
         params = {
             "ids": ",".join(mint_addrs),
         }
 
-        resp = await self._client.get(
-            "https://price.jup.ag/v4/price", params=params, headers=self._base_hdrs
-        )
+        async with httpx.AsyncClient(proxy=proxy) as client:
+            resp = await client.get(
+                "https://price.jup.ag/v4/price", params=params, headers=self._base_hdrs
+            )
         return resp.json()
 
 
 async def main():
     solscan = Solscan()
     # print(await solscan.get_tvl_of_pool("C47dSSMTUTjphq9QS1CAUsBfQGuPzNr6EUBSTz6Z1aQc"))
-    print(await solscan.get_added_liquidity_value("4TU6bGgQPcpH4EGnpWx5FRCqNuvAaGcrrLpS8Mf6rCekNSyHinR9JQhNsZEMx7KyzjScrqPpZXPSCCRTet91X5oQ"))
+    print(
+        await solscan.get_added_liquidity_value(
+            "4TU6bGgQPcpH4EGnpWx5FRCqNuvAaGcrrLpS8Mf6rCekNSyHinR9JQhNsZEMx7KyzjScrqPpZXPSCCRTet91X5oQ"
+        )
+    )
     ...
 
 

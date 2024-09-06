@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import random
 import sys
 import time
 import traceback
@@ -10,7 +11,7 @@ from solana_snipping.backend.solana import SolanaChain
 from solana_snipping.backend.solana.monitor import SolanaMonitor
 from solana_snipping.common.constants import SOL_ADDR
 from solana_snipping.frontend.telegram.alerting import send_msg_log
-from solana_snipping.backend.utils import format_number_decimal
+from solana_snipping.backend.utils import format_number_decimal, get_proxies
 from solana_snipping.solana_strategies import FiltersRaydiumPools
 
 
@@ -34,9 +35,11 @@ async def process_mint(
     solana = SolanaChain()
     raydium = solana.raydium
 
+    proxies = get_proxies()
+    proxy = random.choice(proxies)
     try:
         first_added_liquidity = await solana.solscan.get_added_liquidity_value(
-            signature_trans
+            signature_trans, proxy=proxy
         )
         pool_raydium = format_number_decimal(first_added_liquidity)
     except Exception as e:
@@ -53,7 +56,7 @@ async def process_mint(
     try:
         decimals = await solana.get_token_decimals(mint_addr=mint)
         price = await raydium.get_swap_price(
-            mint1=mint, mint2=SOL_ADDR, decimals=decimals
+            mint1=mint, mint2=SOL_ADDR, decimals=decimals, proxy=proxy
         )
         if isinstance(price, str):
             raise ValueError

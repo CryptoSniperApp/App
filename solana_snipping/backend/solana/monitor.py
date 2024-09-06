@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime
 import decimal
+import random
 import time
 
 from loguru import logger
@@ -10,6 +11,7 @@ import solana.rpc
 from solana_snipping.backend.db import create_async_sessiomaker, setup
 from solana_snipping.backend.db.repositories import AnalyticRepository
 from solana_snipping.backend.solana import SolanaChain
+from solana_snipping.backend.utils import get_proxies
 from solana_snipping.common.constants import SOL_ADDR, solana_async_client
 from solana_snipping.common.app_types import AnalyticData
 
@@ -40,10 +42,13 @@ class SolanaMonitor:
 
         while True:
             try:
+                proxies = get_proxies()
+                proxy = random.choice(proxies)
+
                 if not first_added_liquidity:
                     first_added_liquidity = (
                         await self._chain.solscan.get_added_liquidity_value(
-                            trans=signature_transaction
+                            trans=signature_transaction, proxy=proxy
                         )
                     )
 
@@ -53,7 +58,12 @@ class SolanaMonitor:
                 )
 
                 swap_price_first = await self._chain.raydium.get_swap_price(
-                    mint1=mint1, mint2=SOL_ADDR, decimals=9, amount=0.77, base_out=True
+                    mint1=mint1,
+                    mint2=SOL_ADDR,
+                    decimals=9,
+                    amount=0.77,
+                    base_out=True,
+                    proxy=proxy,
                 )
 
                 async with dbsession() as session:
@@ -69,6 +79,7 @@ class SolanaMonitor:
                             decimals=9,
                             amount=0.77,
                             base_out=True,
+                            proxy=proxy
                         )
                         if type(swap_price) not in (float, decimal.Decimal):
                             await asyncio.sleep(3)
