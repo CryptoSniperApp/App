@@ -253,58 +253,54 @@ class Moonshot:
         seconds_watch = 60 * 60 * 10  # 10 hours
         min_percents = 200
         max_percents = 20
-        start = time.time()
         dbsession = create_async_sessiomaker()
 
         try:
             session = dbsession()
             await session.__aenter__()
             repo = AnalyticRepository(session)
-            while True:
-                try:
-                    data = await queue.get()
+            
+            async with asyncio.timeout(seconds_watch):
+                while True:
+                    try:
+                        data = await queue.get()
 
-                    # Кол-во токенов за 0.77 SOL
-                    price = data["Trade"]["Price"] * 0.77
-                    percentage_diff = (
-                        (price - first_swap_price) / first_swap_price * 100
-                    )
-
-                    data = AnalyticData(
-                        time=time.time(),
-                        mint1_addr=mint,
-                        capture_time=capture_time.timestamp(),
-                        swap_price=price,
-                        swap_time=datetime.now().timestamp(),
-                        percentage_difference=percentage_diff,
-                    )
-                    
-                    await repo.add_analytic(data)
-
-                    logger.info(
-                        f"Swap price: {first_swap_price}, first swap price: {price}. Percentage diff: {percentage_diff}. mint - {mint}"
-                    )
-
-                    if percentage_diff >= max_percents:
-                        # We are sell token
-                        logger.success(f"We are swap token {mint}. Data - {data}")
-                        return
-
-                    elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
-                        # We are leave from market with token :-(
-                        logger.warning(
-                            "We leave from monitor because percentage"
-                            f" difference: {percentage_diff}"
+                        price = data["Trade"]["PriceInUSD"]
+                        percentage_diff = (
+                            (price - first_swap_price) / first_swap_price * 100
                         )
-                        return
 
-                except Exception as e:
-                    logger.exception(e)
-                    await asyncio.sleep(2)
+                        data = AnalyticData(
+                            time=time.time(),
+                            mint1_addr=mint,
+                            capture_time=capture_time.timestamp(),
+                            swap_price=price,
+                            swap_time=datetime.now().timestamp(),
+                            percentage_difference=percentage_diff,
+                        )
+                        
+                        await repo.add_analytic(data)
 
-                finally:
-                    if time.time() - start > seconds_watch:
-                        return
+                        logger.info(
+                            f"Swap price: {first_swap_price}, first swap price: {price}. Percentage diff: {percentage_diff}. mint - {mint}"
+                        )
+
+                        if percentage_diff >= max_percents:
+                            # We are sell token
+                            logger.success(f"We are swap token {mint}. Data - {data}")
+                            return
+
+                        elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
+                            # We are leave from market with token :-(
+                            logger.warning(
+                                "We leave from monitor because percentage"
+                                f" difference: {percentage_diff}"
+                            )
+                            return
+
+                    except Exception as e:
+                        logger.exception(e)
+                        await asyncio.sleep(2)
         finally:
             await session.__aexit__(None, None, None)
             self._moonshot_client._mints_price_watch_queues.remove(queue)
