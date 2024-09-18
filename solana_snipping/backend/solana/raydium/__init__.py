@@ -9,6 +9,7 @@ from loguru import logger
 import orjson
 from solders.rpc.responses import GetTransactionResp  # type: ignore
 import websockets.client
+
 from solana_snipping.backend.solana.raydium.generated.pools import PoolStateStub
 from solana_snipping.backend.utils import append_hdrs
 from solana_snipping.common.config import get_config
@@ -37,11 +38,11 @@ class RaydiumAPI:
         }
         return append_hdrs(headers)
 
-    async def get_volume_of_pool(self, pool_id: str):
+    async def get_volume_of_pool(self, parsed_pool_data: bytes):
         if not self._grpc_conn:
             self._setup_grpc_stub()
 
-        data = await self._grpc_conn.get_pool_state(pool_address=pool_id)
+        data = await self._grpc_conn.get_pool_state(pool_data=parsed_pool_data)
         if data.error.error:
             obj = data.to_dict(
                 casing=betterproto.Casing.SNAKE, include_default_values=True
@@ -235,7 +236,7 @@ class RaydiumAPI:
         channel = Channel(host=opts["host"], port=int(opts["port"]))
         self._grpc_conn = PoolStateStub(channel=channel)
 
-    async def get_pool_tokens_mints(self, parsed_transaction: str) -> list[None | str]:
+    async def extract_mints_from_transaction(self, parsed_transaction: str) -> list[None | str]:
         try:
             resp = GetTransactionResp.from_json(parsed_transaction)
             instructions = resp.value.transaction.transaction.message.instructions

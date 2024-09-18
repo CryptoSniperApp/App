@@ -21,3 +21,6 @@ microservices:
   raydium:
     host: $GRPC_HOST_RAYDIUM|127.0.0.1
     port: $GRPC_PORT_RAYDIUM|50051
+
+bitquery:
+  token: $BITQUERY_TOKEN

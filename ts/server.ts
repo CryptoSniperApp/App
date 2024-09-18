@@ -1,11 +1,9 @@
-import { Connection, PublicKey } from "@solana/web3.js";
-import {
-  LIQUIDITY_STATE_LAYOUT_V4,
-} from "@raydium-io/raydium-sdk";
-import BN from "bn.js";
-import { ErrorMesssage, RequestPoolState, ResponsePoolState, PoolStateService, PoolStateServer, ResponsePoolStateOperation } from "./generated_ts_proto/pools";
+import { Connection } from "@solana/web3.js";
+import { LIQUIDITY_STATE_LAYOUT_V4 } from "@raydium-io/raydium-sdk";
+import { ErrorMesssage, RequestPoolState, ResponsePoolState, ResponsePoolStateOperation, PoolStateService } from "./generated_ts_proto/pools";
 import * as grpc from '@grpc/grpc-js';
 
+const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
 interface PoolInfo {
   success: boolean;
@@ -27,15 +25,12 @@ interface Error {
 }
 
 
-export async function parsePoolInfo(poolAddress: string): Promise<PoolInfo> {
+export async function parsePoolInfo(poolData: Buffer): Promise<PoolInfo> {
   try {
-    const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
-    const info = await connection.getAccountInfo(new PublicKey(poolAddress));
-    if (!info) return { "success": false };
-    const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(info.data);
-    console.log(poolState);
-    const baseDecimal = poolState.baseDecimal.toNumber();
-    const quoteDecimal = poolState.quoteDecimal.toNumber();
+    if (!poolData) return { "success": false };
+    const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(poolData);
+    const baseDecimal = Number(poolState.baseDecimal.toString());
+    const quoteDecimal = Number(poolState.quoteDecimal.toString());
 
     const baseTokenAmount = await connection.getTokenAccountBalance(
       poolState.baseVault
@@ -43,8 +38,7 @@ export async function parsePoolInfo(poolAddress: string): Promise<PoolInfo> {
     const quoteTokenAmount = await connection.getTokenAccountBalance(
       poolState.quoteVault
     );
-
-    const denominator = new BN(10).pow(poolState.baseDecimal);
+    {}
 
     return {
       "success": true,
@@ -64,10 +58,10 @@ export async function parsePoolInfo(poolAddress: string): Promise<PoolInfo> {
 
 
 const server = new grpc.Server();
-const impl: PoolStateServer = {
+const impl = {
   async getPoolState(call: grpc.ServerUnaryCall<RequestPoolState, RequestPoolState>, callback: grpc.sendUnaryData<ResponsePoolStateOperation>): Promise<void> {
-    var data = await parsePoolInfo(call.request.poolAddress);
-    var responseData: any = {}
+    var data = await parsePoolInfo(Buffer.from(call.request.poolData));
+    var responseData: any = {};
 
     if (data.success) {
       let resp = ResponsePoolState.create({
@@ -78,17 +72,15 @@ const impl: PoolStateServer = {
         quoteDecimal: data.quoteDecimal,
         quoteTokenAddress: data.quoteTokenAddress,
         quoteTokenAmount: data.quoteVault,
-  
-        poolAddress: call.request.poolAddress,
 
         baseMint: data.baseMint,
         quoteMint: data.quoteMint,
       });
-      responseData["data"] = resp;
+      responseData.data = resp;
     }
     else {
       let resp = ErrorMesssage.create({error: data.error});
-      responseData["error"] = resp;
+      responseData.error = resp;
     }
     callback(null, ResponsePoolStateOperation.create(responseData));
   }

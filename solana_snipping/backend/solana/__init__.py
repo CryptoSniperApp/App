@@ -22,6 +22,10 @@ class SolanaChain:
     @property
     def solscan(self):
         return Solscan()
+    
+    @property
+    def solclient(self):
+        return self._solclient
 
     @property
     def rug_checker(self):

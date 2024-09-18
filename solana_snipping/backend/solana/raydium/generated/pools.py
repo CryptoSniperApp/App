@@ -13,11 +13,10 @@ class ResponsePoolState(betterproto.Message):
     quote_decimal: int = betterproto.int32_field(2)
     base_token_amount: str = betterproto.string_field(3)
     quote_token_amount: str = betterproto.string_field(4)
-    pool_address: str = betterproto.string_field(5)
-    base_token_address: str = betterproto.string_field(6)
-    quote_token_address: str = betterproto.string_field(7)
-    base_mint: str = betterproto.string_field(8)
-    quote_mint: str = betterproto.string_field(9)
+    base_token_address: str = betterproto.string_field(5)
+    quote_token_address: str = betterproto.string_field(6)
+    base_mint: str = betterproto.string_field(7)
+    quote_mint: str = betterproto.string_field(8)
 
 
 @dataclass
@@ -27,7 +26,7 @@ class ErrorMesssage(betterproto.Message):
 
 @dataclass
 class RequestPoolState(betterproto.Message):
-    pool_address: str = betterproto.string_field(1)
+    pool_data: bytes = betterproto.bytes_field(1)
 
 
 @dataclass
@@ -38,10 +37,10 @@ class ResponsePoolStateOperation(betterproto.Message):
 
 class PoolStateStub(betterproto.ServiceStub):
     async def get_pool_state(
-        self, *, pool_address: str = ""
+        self, *, pool_data: bytes = b""
     ) -> ResponsePoolStateOperation:
         request = RequestPoolState()
-        request.pool_address = pool_address
+        request.pool_data = pool_data
 
         return await self._unary_unary(
             "/PoolState/getPoolState",

@@ -7,12 +7,11 @@ message ResponsePoolState {
     string baseTokenAmount = 3;
     string quoteTokenAmount = 4;
 
-    string poolAddress = 5;
-    string baseTokenAddress = 6;
-    string quoteTokenAddress = 7;
+    string baseTokenAddress = 5;
+    string quoteTokenAddress = 6;
 
-    string baseMint = 8;
-    string quoteMint = 9;
+    string baseMint = 7;
+    string quoteMint = 8;
 }
 
 
@@ -22,7 +21,7 @@ message ErrorMesssage {
 
 
 message RequestPoolState {
-    string poolAddress = 1;
+    bytes poolData = 1;
 }
 
 

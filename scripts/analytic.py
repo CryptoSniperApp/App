@@ -42,6 +42,9 @@ class ReadableAnalytic:
 
             first_liquidity = [r["first_added_liquiduty_value"] for r in token_data][0]
             pool_open_time = [r["pool_open_time"] for r in token_data][0]
+            
+            max_amount = max(all_amounts)
+            
             min_amount = min(all_amounts)
             min_amount_time = [r["swap_time"] for r in token_data if r["swap_price"] == min_amount][0]
 
@@ -49,11 +52,12 @@ class ReadableAnalytic:
                 "Адрес Токена": token,
                 "Кол-во токенов при первой покупке за 0.77 SOL": amount_start,
                 "Минимальное кол-во токенов за 0.77 SOL": min_amount,
+                "Максимальное кол-во токенов за 0.77 SOL": max_amount,
                 "Разница в %": round((amount_start - min_amount) / min_amount * 100, 2),
                 "Первая ликвидность": first_liquidity,
-                "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M %d.%m.%Y"),
-                "Время максимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M %d.%m.%Y"),
-                "Время первой покупки": datetime.fromtimestamp(amount_start_time).strftime("%H:%M %d.%m.%Y"),
+                "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M:%S %d.%m.%Y"),
+                "Время максимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
+                "Время первой покупки": datetime.fromtimestamp(amount_start_time).strftime("%H:%M:%S %d.%m.%Y"),
             }
             data.append(obj)
 

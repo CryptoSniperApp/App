@@ -1,13 +1,27 @@
+import asyncio
 import decimal
 import random
 import re
 
+from loguru import logger
 import ua_generator
 
 def format_number_decimal(num: int | float | str) -> str:
     num = decimal.Decimal(str(num))
     decimals = - num.as_tuple().exponent
     return f"{num:,.{decimals}f}"
+
+
+class AsyncioTasksCallbacks:
+    @staticmethod
+    def raise_exception_if_set(task: asyncio.Task):
+        try:
+            task.result()
+        except Exception as e:
+            logger.exception(e)
+            raise e
+
+asyncio_callbacks = AsyncioTasksCallbacks()
 
 
 def append_hdrs(headers: dict):
