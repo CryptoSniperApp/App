@@ -24,3 +24,4 @@ microservices:
 
 bitquery:
   token: $BITQUERY_TOKEN
+  secret: $BITQUERY_SECRET

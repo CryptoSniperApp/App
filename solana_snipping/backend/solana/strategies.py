@@ -7,6 +7,8 @@ from loguru import logger
 from solders.pubkey import Pubkey
 from solders.rpc.responses import GetTransactionResp
 
+from solana_snipping.backend.db import create_async_sessiomaker
+from solana_snipping.backend.db.repositories import AnalyticRepository
 from solana_snipping.backend.solana import SolanaChain
 from solana_snipping.backend.solana.monitor import SolanaMonitor
 from solana_snipping.backend.solana.moonshot_api import MoonshotAPI
@@ -117,7 +119,9 @@ class RaydiumPools:
             parsed_pool_data = await solana.solclient.get_account_info(
                 Pubkey.from_string(pool_id), commitment="finalized"
             )
-            volume_of_pool = await solana.raydium.get_volume_of_pool(parsed_pool_data.value.data)
+            volume_of_pool = await solana.raydium.get_volume_of_pool(
+                parsed_pool_data.value.data
+            )
             volume_of_pool = format_number_decimal(volume_of_pool)
         except Exception as e:
             logger.exception(e)
@@ -181,10 +185,13 @@ class Moonshot:
         self._loop = asyncio.get_running_loop()
         self._futures = []
 
-    def handle_transaction(self, signature: str, transaction_received: datetime):
+    def handle_transaction(
+        self, signature: str, transaction_received: datetime, mint: str
+    ):
         f = asyncio.eager_task_factory(
             loop=self._loop,
-            coro=self._handle_transaction(signature, transaction_received),
+            # coro=self._handle_transaction(signature, transaction_received),
+            coro=self._process_data(mint, transaction_received, signature),
         )
         f.add_done_callback(asyncio_callbacks.raise_exception_if_set)
         self._futures.append(f)
@@ -214,47 +221,45 @@ class Moonshot:
         transaction_received: datetime,
         signature_transaction: str,
     ):
-        attempts = 0
-        while True:
-            if attempts > 5:
-                return
-            
-            try:
-                prices = await self._moonshot_client.get_price_of_mint(mint)
-                first_swap_price = prices["sol"] * 0.77
-                
-                if first_swap_price:
-                    break
-                attempts += 1
-            
-            except IndexError:
-                attempts += 1
-            
-            except Exception as e:
-                attempts += 1
-                logger.exception(e)
-            
-            await asyncio.sleep(3)
-            
+        queue = asyncio.Queue()
+        self._moonshot_client._mints_price_watch_queues.append(queue)
+        try:
+            async with asyncio.timeout(60):
+                obj = await queue.get()
+                prices = {
+                    "usd": obj["Trade"]["PriceInUSD"],
+                    "sol": obj["Trade"]["Price"],
+                }
+                first_swap_price = float(prices["usd"])
+        except Exception as e:
+            logger.exception(e)
+            return
+
         # Buy here
         capture_time = datetime.now()
+        try:
+            first_usd_price = format_number_decimal(prices["usd"])
+        except Exception:
+            first_usd_price = prices["usd"]
+        
         message = (
             f"ТИП - MOONSHOT DEXSCREENER\n"
-            f"Адрес - *{mint}*\n"
+            f"Адрес токена - *{mint}*\n\n"
             f"Поймали транзакцию в _{transaction_received}_, купили монету в _{capture_time}_.\n\n"
-            f"Купили по цене: 1 token = *{prices["usd"]}* USD\n"
+            f"Купили по цене: 1 token = *{first_usd_price}* USD\n"
         )
         await send_msg_log(message, mint, trans=signature_transaction)
-
-        queue = asyncio.Queue()
-        self._moonshot_client.subscribe_mint_price_change(mint, queue)
 
         seconds_watch = 60 * 60 * 10  # 10 hours
         min_percents = 200
         max_percents = 20
         start = time.time()
+        dbsession = create_async_sessiomaker()
 
         try:
+            session = dbsession()
+            await session.__aenter__()
+            repo = AnalyticRepository(session)
             while True:
                 try:
                     data = await queue.get()
@@ -264,7 +269,7 @@ class Moonshot:
                     percentage_diff = (
                         (price - first_swap_price) / first_swap_price * 100
                     )
-                    
+
                     data = AnalyticData(
                         time=time.time(),
                         mint1_addr=mint,
@@ -273,6 +278,8 @@ class Moonshot:
                         swap_time=datetime.now().timestamp(),
                         percentage_difference=percentage_diff,
                     )
+                    
+                    await repo.add_analytic(data)
 
                     logger.info(
                         f"Swap price: {first_swap_price}, first swap price: {price}. Percentage diff: {percentage_diff}. mint - {mint}"
@@ -299,18 +306,22 @@ class Moonshot:
                     if time.time() - start > seconds_watch:
                         return
         finally:
-            self._moonshot_client.unsubscribe_mint_price_change(mint, queue)
+            await session.__aexit__(None, None, None)
+            self._moonshot_client._mints_price_watch_queues.remove(queue)
+            self._moonshot_client._mints_price_watch.remove(mint)
 
     def subscribe_to_moonshot_mints_create(self, queue: asyncio.Queue):
         loop = asyncio.get_running_loop()
-        f = asyncio.eager_task_factory(
-            loop=loop,
-            coro=self._moonshot_client.subscribe_to_dexscreener_moonshot_mints_create(
+
+        for coro in [
+            self._moonshot_client.subscribe_to_dexscreener_moonshot_mints_create(
                 queue=queue
             ),
-        )
-        f.add_done_callback(asyncio_callbacks.raise_exception_if_set)
-        self._futures.append(f)
+            self._moonshot_client._scan_prices_of_mints(),
+        ]:
+            f = asyncio.eager_task_factory(loop=loop, coro=coro)
+            f.add_done_callback(asyncio_callbacks.raise_exception_if_set)
+            self._futures.append(f)
 
 
 async def main():

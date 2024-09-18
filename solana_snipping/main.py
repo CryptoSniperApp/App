@@ -21,7 +21,7 @@ async def solana_strategy():
     await asyncio.sleep(1)
 
     while True:
-        signature, dt = await q.get()
+        signature, mint, dt = await q.get()
 
         if time.time() - reset_cache >= 300:  # if more than 5 minutes have passed
             cache.clear()
@@ -31,10 +31,10 @@ async def solana_strategy():
             continue
 
         cache.append(signature)
-        logger.info(f"{signature} - {dt}")
+        logger.info(f"{signature} - {mint} - {dt}")
 
         try:
-            strategy.handle_transaction(signature, dt)
+            strategy.handle_transaction(signature, dt, mint)
         except Exception as e:
             logger.exception(e)
 
