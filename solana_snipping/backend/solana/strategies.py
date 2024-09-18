@@ -214,8 +214,28 @@ class Moonshot:
         transaction_received: datetime,
         signature_transaction: str,
     ):
-        prices = await self._moonshot_client.get_price_of_mint(mint)
-        first_swap_price = prices["sol"] * 0.77
+        attempts = 0
+        while True:
+            if attempts > 5:
+                return
+            
+            try:
+                prices = await self._moonshot_client.get_price_of_mint(mint)
+                first_swap_price = prices["sol"] * 0.77
+                
+                if first_swap_price:
+                    break
+                attempts += 1
+            
+            except IndexError:
+                attempts += 1
+            
+            except Exception as e:
+                attempts += 1
+                logger.exception(e)
+            
+            await asyncio.sleep(3)
+            
         # Buy here
         capture_time = datetime.now()
         message = (
