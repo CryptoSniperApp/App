@@ -208,7 +208,7 @@ class MoonshotAPI:
                         for item in data["Solana"]["DEXTradeByTokens"]:
                             mint = item["Trade"]["Currency"]["MintAddress"]
                             if mint in self._mints_to_watch:
-                                [await queue.put(item) for queue in self._queues]
+                                [await queue.put((item, mint)) for queue in self._queues]
 
                     error_count = 0
                 except Exception as e:
@@ -302,7 +302,7 @@ class MoonshotAPI:
                         for trade in data["Solana"]["DEXTradeByTokens"]:
                             mint = trade["Trade"]["Currency"]["MintAddress"]
                             if mint in self._mints_price_watch:
-                                [await queue.put(trade) for queue in self._mints_price_watch_queues]
+                                [await queue.put((trade, mint)) for queue in self._mints_price_watch_queues]
                 
                 except Exception as e:
                     logger.exception(e)

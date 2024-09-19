@@ -1,6 +1,7 @@
 from datetime import datetime
 import sqlite3
 
+from solana_snipping.backend.utils import format_number_decimal
 import pandas as pd
 
 
@@ -44,23 +45,35 @@ class ReadableAnalytic:
             pool_open_time = [r["pool_open_time"] for r in token_data][0]
             
             max_amount = max(all_amounts)
-            
+            max_amount_time = [r["swap_time"] for r in token_data if r["swap_price"] == max_amount][0]
             min_amount = min(all_amounts)
             min_amount_time = [r["swap_time"] for r in token_data if r["swap_price"] == min_amount][0]
+            
+            if max_amount_time - min_amount_time == 0:
+                continue
+            
+            last_percent_diffirence = [r["percentage_difference"] for r in token_data if r["time"] == time_end][0]
 
             obj = {
                 "Адрес Токена": token,
-                "Кол-во токенов при первой покупке за 0.77 SOL": amount_start,
-                "Минимальное кол-во токенов за 0.77 SOL": min_amount,
-                "Максимальное кол-во токенов за 0.77 SOL": max_amount,
-                "Разница в %": round((amount_start - min_amount) / min_amount * 100, 2),
-                "Первая ликвидность": first_liquidity,
-                "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M:%S %d.%m.%Y"),
-                "Время максимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
+                "Цена в USD в начале": format_number_decimal(amount_start),
+                "Минимальная цена в USD": format_number_decimal(min_amount),
+                "Максимальная цена в USD": format_number_decimal(max_amount),
+                "Разница в %": last_percent_diffirence,
+                # "Первая ликвидность": first_liquidity,
+                # "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M:%S %d.%m.%Y") if pool_open_time else "",
+                "Время минимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
+                "Время максимальной цены": datetime.fromtimestamp(max_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
                 "Время первой покупки": datetime.fromtimestamp(amount_start_time).strftime("%H:%M:%S %d.%m.%Y"),
+                # "Время начала слежки": datetime.fromtimestamp(time_start),
+                # "Время окончания слежки": datetime.fromtimestamp(time_end),
             }
+            obj["Время слежки"] = datetime.fromtimestamp(time_end) - datetime.fromtimestamp(time_start)
+            
             data.append(obj)
-
+        
+        data = sorted(data, key=lambda x: x["Время слежки"], reverse=True)
+        data = sorted(data, key=lambda x: x["Разница в %"], reverse=True)
         return pd.DataFrame(data)
 
 

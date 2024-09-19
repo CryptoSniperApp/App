@@ -263,7 +263,9 @@ class Moonshot:
             async with asyncio.timeout(seconds_watch):
                 while True:
                     try:
-                        data = await queue.get()
+                        data, event_mint = await queue.get()
+                        if event_mint != mint:
+                            continue
 
                         price = data["Trade"]["PriceInUSD"]
                         percentage_diff = (
