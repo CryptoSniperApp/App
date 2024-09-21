@@ -292,18 +292,18 @@ class Moonshot:
                             f"Swap price: {first_swap_price}, first swap price: {price}. Percentage diff: {percentage_diff}. mint - {mint}"
                         )
 
-                        if percentage_diff >= max_percents:
-                            # We are sell token
-                            logger.success(f"We are swap token {mint}. Data - {data}")
-                            return
+                        # if percentage_diff >= max_percents:
+                        #     # We are sell token
+                        #     logger.success(f"We are swap token {mint}. Data - {data}")
+                        #     return
 
-                        elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
-                            # We are leave from market with token :-(
-                            logger.warning(
-                                "We leave from monitor because percentage"
-                                f" difference: {percentage_diff}"
-                            )
-                            return
+                        # elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
+                        #     # We are leave from market with token :-(
+                        #     logger.warning(
+                        #         "We leave from monitor because percentage"
+                        #         f" difference: {percentage_diff}"
+                        #     )
+                        #     return
 
                     except Exception as e:
                         logger.exception(e)
