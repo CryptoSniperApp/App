@@ -3,6 +3,7 @@ import ua_generator
 import asyncio
 from loguru import logger
 import websockets.client
+from gql.transport.exceptions import TransportClosed
 import websockets.exceptions
 import orjson
 import httpx
@@ -33,7 +34,7 @@ class MoonshotAPI:
 
         self._mints_to_watch = []
         self._queues = []
-        
+
         self._mints_price_watch = []
         self._mints_price_watch_queues = []
 
@@ -65,7 +66,9 @@ class MoonshotAPI:
             "Content-Type": "application/json",
         }
         url = f"{self._bitquery_wss}?token={self._bitquery_token}"
-        transport = WebsocketsTransport(url=url, headers=headers)
+        transport = WebsocketsTransport(
+            url=url, headers=headers, ping_interval=20, pong_timeout=60
+        )
         if not transport.websocket:
             await transport.connect()
 
@@ -112,11 +115,14 @@ class MoonshotAPI:
 
                         queue_data = (signature, mint, datetime.now())
                         await queue.put(queue_data)
-                        
+
                         self._mints_price_watch.append(mint)
-                        
-                except websockets.exceptions.ConnectionClosedError:
+
+                except (TransportClosed, websockets.exceptions.ConnectionClosedError):
                     await asyncio.sleep(3)
+                    if not transport.websocket:
+                        await transport.connect()
+                        
                 except Exception as e:
                     logger.exception(e)
                     raise e
@@ -208,7 +214,10 @@ class MoonshotAPI:
                         for item in data["Solana"]["DEXTradeByTokens"]:
                             mint = item["Trade"]["Currency"]["MintAddress"]
                             if mint in self._mints_to_watch:
-                                [await queue.put((item, mint)) for queue in self._queues]
+                                [
+                                    await queue.put((item, mint))
+                                    for queue in self._queues
+                                ]
 
                     error_count = 0
                 except Exception as e:
@@ -241,7 +250,7 @@ class MoonshotAPI:
                 self._queues.remove(q)
             except ValueError:
                 pass
-    
+
     async def _scan_prices_of_mints(self) -> None:
         query = """
         subscription {
@@ -280,15 +289,17 @@ class MoonshotAPI:
             }
             }
         """
-        
+
         headers = {
             "Sec-WebSocket-Protocol": "graphql-ws",
             "Content-Type": "application/json",
         }
         url = f"{self._bitquery_wss}?token={self._bitquery_token}"
-        transport = WebsocketsTransport(url=url, headers=headers)
+        transport = WebsocketsTransport(
+            url=url, headers=headers, ping_interval=20, pong_timeout=60
+        )
         await transport.connect()
-        
+
         try:
             while True:
                 try:
@@ -298,18 +309,36 @@ class MoonshotAPI:
                             continue
 
                         data = result.data
-                        
+
                         for trade in data["Solana"]["DEXTradeByTokens"]:
                             mint = trade["Trade"]["Currency"]["MintAddress"]
                             if mint in self._mints_price_watch:
-                                [await queue.put((trade, mint)) for queue in self._mints_price_watch_queues]
-                
+                                [
+                                    await queue.put((trade, mint))
+                                    for queue in self._mints_price_watch_queues
+                                ]
+
+                except (
+                    websockets.exceptions.ConnectionClosedError,
+                    TransportClosed,
+                ) as e:
+                    if "keepalive ping timeout" in str(e):
+                        logger.warning(
+                            "Соединение закрыто из-за таймаута пинга. Переподключение..."
+                        )
+                        await asyncio.sleep(5)
+                    elif isinstance(e, websockets.exceptions.ConnectionClosedError):
+                        logger.error(f"Ошибка соединения WebSocket: {e}")
+                        await asyncio.sleep(3)
+
+                    if not transport.websocket:
+                        await transport.connect()
+
                 except Exception as e:
                     logger.exception(e)
                     await asyncio.sleep(3)
         finally:
             await transport.close()
-        
 
 
 async def main():
