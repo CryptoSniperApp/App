@@ -223,22 +223,26 @@ class Moonshot:
     ):
         queue = asyncio.Queue()
         self._moonshot_client._mints_price_watch_queues.append(queue)
-        async with asyncio.timeout(60):
-            while True:
-                try:
-                    obj, mint_ = await queue.get()
-                    if mint_ != mint:
-                        continue
+        try:
+            async with asyncio.timeout(60):
+                while True:
+                    try:
+                        obj, mint_ = await queue.get()
+                        if mint_ != mint:
+                            continue
 
-                    prices = {
-                        "usd": obj["Trade"]["PriceInUSD"],
-                        "sol": obj["Trade"]["Price"],
-                    }
-                    first_swap_price = float(prices["usd"])
-                    break
-                
-                except Exception as e:
-                    logger.exception(e)
+                        prices = {
+                            "usd": obj["Trade"]["PriceInUSD"],
+                            "sol": obj["Trade"]["Price"],
+                        }
+                        first_swap_price = float(prices["usd"])
+                        break
+                    
+                    except Exception as e:
+                        logger.exception(e)
+        except asyncio.TimeoutError:
+            logger.error(f"Не удалось получить цену для {mint} в течение 60 секунд")
+            return
 
         # Buy here
         capture_time = datetime.now()
