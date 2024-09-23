@@ -269,6 +269,16 @@ class Moonshot:
             await session.__aenter__()
             repo = AnalyticRepository(session)
             
+            data = AnalyticData(
+                time=time.time(),
+                mint1_addr=mint,
+                capture_time=capture_time.timestamp(),
+                swap_price=prices["usd"],
+                swap_time=datetime.now().timestamp(),
+                percentage_difference=0,
+            )
+            await repo.add_analytic(data)
+            
             async with asyncio.timeout(seconds_watch):
                 while True:
                     try:
@@ -312,6 +322,8 @@ class Moonshot:
                     except Exception as e:
                         logger.exception(e)
                         await asyncio.sleep(2)
+        except asyncio.TimeoutError:
+            logger.info(f"Выходим из мониторинга {mint}")
         finally:
             await session.__aexit__(None, None, None)
             self._moonshot_client._mints_price_watch_queues.remove(queue)

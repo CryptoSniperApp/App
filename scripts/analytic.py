@@ -21,7 +21,8 @@ class ReadableAnalytic:
         data = []
         for token in self._tokens:
             token_data = [r for r in self.data if r["mint1_addr"] == token]
-
+            
+            mint_time = token_data[0]["capture_time"]
             times = [r["time"] for r in token_data]
             time_start = min(times)
             time_end = max(times)
@@ -60,9 +61,11 @@ class ReadableAnalytic:
                 "Минимальная цена в USD": format_number_decimal(min_amount),
                 "Максимальная цена в USD": format_number_decimal(max_amount),
                 "Разница в %": last_percent_diffirence,
+                "Разница между начальной и максимальной ценой в %": (max_amount - amount_start) / amount_start * 100,
                 # "Первая ликвидность": first_liquidity,
                 # "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M:%S %d.%m.%Y") if pool_open_time else "",
                 "Время минимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
+                "Время минта": datetime.fromtimestamp(mint_time).strftime("%H:%M:%S %d.%m.%Y"),
                 "Время максимальной цены": datetime.fromtimestamp(max_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
                 "Время первой покупки": datetime.fromtimestamp(amount_start_time).strftime("%H:%M:%S %d.%m.%Y"),
                 # "Время начала слежки": datetime.fromtimestamp(time_start),
