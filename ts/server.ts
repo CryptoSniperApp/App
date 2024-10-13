@@ -1,8 +1,12 @@
-import { Connection } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { LIQUIDITY_STATE_LAYOUT_V4 } from "@raydium-io/raydium-sdk";
-import { ErrorMesssage, RequestPoolState, ResponsePoolState, ResponsePoolStateOperation, PoolStateService } from "./generated_ts_proto/pools";
+import * as pools from "./generated_ts_proto/pools";
 import * as grpc from '@grpc/grpc-js';
+import * as trade_utils from './trade_utils';
+import bs58 from "bs58";
+import * as dotenv from 'dotenv';
 
+dotenv.config();
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
 
 interface PoolInfo {
@@ -23,6 +27,27 @@ interface Error {
   success: boolean;
   error: string
 }
+
+
+class ConnectionSolanaPool {
+  private connection: Connection | null;
+  private chainstackConnection: Connection | null;
+
+  constructor() {
+    this.connection = null;
+    this.chainstackConnection = null;
+  }  
+
+  getChainstackConnection() {
+    let c = new Connection(process.env.MOONSHOT_RPC_ENDPOINT as string, "recent");
+    this.chainstackConnection = c;
+    
+    return this.chainstackConnection;
+  }
+}
+
+
+export const connPool = new ConnectionSolanaPool();
 
 
 export async function parsePoolInfo(poolData: Buffer): Promise<PoolInfo> {
@@ -58,13 +83,16 @@ export async function parsePoolInfo(poolData: Buffer): Promise<PoolInfo> {
 
 
 const server = new grpc.Server();
-const impl = {
-  async getPoolState(call: grpc.ServerUnaryCall<RequestPoolState, RequestPoolState>, callback: grpc.sendUnaryData<ResponsePoolStateOperation>): Promise<void> {
+const impl: pools.PoolStateServer = {
+  async getPoolState(
+    call: grpc.ServerUnaryCall<pools.RequestPoolState, pools.RequestPoolState>, 
+    callback: grpc.sendUnaryData<pools.ResponsePoolStateOperation>
+  ): Promise<void> {
     var data = await parsePoolInfo(Buffer.from(call.request.poolData));
     var responseData: any = {};
 
     if (data.success) {
-      let resp = ResponsePoolState.create({
+      let resp = pools.ResponsePoolState.create({
         baseDecimal: data.baseDecimal,
         baseTokenAddress: data.baseTokenAddress,
         baseTokenAmount: data.baseVault,
@@ -79,19 +107,221 @@ const impl = {
       responseData.data = resp;
     }
     else {
-      let resp = ErrorMesssage.create({error: data.error});
+      let resp = pools.ErrorMesssage.create({error: data.error});
       responseData.error = resp;
     }
-    callback(null, ResponsePoolStateOperation.create(responseData));
+    callback(null, pools.ResponsePoolStateOperation.create(responseData));
   }
 }
 
+const tokensImpl: pools.TokensSolanaServer = {
+  async swapTokens(
+    call: grpc.ServerUnaryCall<pools.RequestSwapTokens, pools.RequestSwapTokens>, 
+    callback: grpc.sendUnaryData<pools.ResponseSwapTokens>
+  ): Promise<void> {
+    let connection = connPool.getChainstackConnection();
+    let resp;
+    try {
+      let req = call.request;
+      let kp = Keypair.fromSecretKey(bs58.decode(req.privateKey));
+
+      let slippage: number | null = null;
+      let microlamports: number | null = null;
+
+      if (req.slippage !== 0) {
+        slippage = req.slippage;
+      }
+      if (req.microlamports !== 0) {
+        microlamports = req.microlamports;
+      }
+
+      if (req.swapAll == true && req.transactionType == "SELL") {
+        if (req.tokenAccountAddress == "") {
+          let tokenAccountAddress = await trade_utils.getAssociatedTokenAccount(
+            req.mint,
+            kp.publicKey.toBase58()
+          )
+
+          req.tokenAccountAddress = tokenAccountAddress.toString();
+        }
+
+        let balance = await trade_utils.getTokenAmountInWallet(
+          connection,
+          req.tokenAccountAddress
+        );
+        if (balance) {
+          req.amount = balance;
+        }
+
+      }
+      var decimals;
+
+      if (req.decimal === 0 || !req.decimal) {
+        try {
+          let info = await connection.getParsedAccountInfo(
+            new PublicKey(req.mint),
+            "confirmed"
+          )
+          if (info) {
+            let parsed = info.value?.data as any;
+            decimals = parsed.parsed.info.decimals;
+          }
+        } catch (error) {
+          console.error(`we got an error when try to get token decimals for mint: ${req.mint}. error: ${error}`)
+        }
+      } else {
+        decimals = req.decimal;
+      }
+      
+      let txHash: string = "";
+      let taken: number | null = null;
+      
+      [txHash, taken] = await trade_utils.swapTokens(
+        connection, 
+        req.transactionType as "BUY" | "SELL", 
+        req.mint,
+        req.privateKey,
+        req.amount, 
+        slippage,
+        microlamports,
+        decimals
+      )
+
+      if (req.closeAccount == true) {
+        try {
+          let resp = await trade_utils.closeTokenAccount(
+            req.tokenAccountAddress,
+            kp,
+            connection,
+            kp.publicKey,
+            kp.publicKey
+          )
+          console.log(`closed token account for mint: ${req.mint}. txHash: ${resp}`)
+        } catch (error: any) {
+          console.error(`we got an error when try to close token account for mint: ${req.mint}. error: ${error}. trace: ${error.stack}`)
+        }
+      }
+
+      resp = pools.ResponseSwapTokens.create({
+        txSignature: txHash,
+        msTimeTaken: taken ? taken.toString() : "",
+        success: true
+      });
+
+    } catch (error: any) {
+      console.error(`we got an error when try to swap tokens. error: ${error}. mint: ${call.request.mint}`)
+      resp = pools.ResponseSwapTokens.create({
+        txSignature: "",
+        msTimeTaken: "",
+        success: false,
+        error: `${error.stack}`
+      });
+    }
+
+    callback(null, resp);
+  },
+  async createTokenAccount(
+    call: grpc.ServerUnaryCall<pools.CreateTokenAccount, pools.CreateTokenAccount>, 
+    callback: grpc.sendUnaryData<pools.ResponseCreateTokenAccount>
+  ): Promise<void> {
+    let response;
+    let connection = connPool.getChainstackConnection();
+    try {
+      let ataPublicKey: PublicKey | null = null;
+
+      if (!call.request.ataPublicKey || call.request.ataPublicKey == "") {
+        ataPublicKey = null;
+      } else {
+        ataPublicKey = new PublicKey(call.request.ataPublicKey);
+      }
+
+      let signer = Keypair.fromSecretKey(bs58.decode(call.request.privateKey));
+      let resp = await trade_utils.createTokenAccount(
+        call.request.mint,
+        signer.publicKey.toBase58(),
+        connection,
+        signer,
+        ataPublicKey
+      )
+
+      response = pools.ResponseCreateTokenAccount.create({
+        txSignature: resp,
+        success: true
+      });
+    } catch (error) {
+      console.error(`we got an error when try to create token account. error: ${error}. mint: ${call.request.mint}`)
+      response = pools.ResponseCreateTokenAccount.create({
+        success: false
+      });
+    }
+    
+    callback(null, response);
+  },
+
+  async getAssociatedTokenAccount(
+    call: grpc.ServerUnaryCall<pools.GetAssociatedTokenAccount, pools.GetAssociatedTokenAccount>, 
+    callback: grpc.sendUnaryData<pools.ResponseGetAssociatedTokenAccount>
+  ): Promise<void> {
+    let resp;
+    try {
+      resp = await trade_utils.getAssociatedTokenAccount(
+        call.request.mintAddress,
+        call.request.walletPublicKey
+      )
+
+      resp = pools.ResponseGetAssociatedTokenAccount.create({
+        ataPublicKey: resp.toString(),
+        success: true
+      });
+    } catch (error) {
+      console.error(`we got an error when try to get associated token account. error: ${error}. mint: ${call.request.mintAddress}`)
+      resp = pools.ResponseGetAssociatedTokenAccount.create({
+        success: false
+      });
+    }
+
+    callback(null, resp);
+  },
+  async closeTokenAccount(
+    call: grpc.ServerUnaryCall<pools.CloseTokenAccount, pools.CloseTokenAccount>, 
+    callback: grpc.sendUnaryData<pools.ResponseCloseTokenAccount>
+  ): Promise<void> {
+    let resp;
+    try {
+      let req = call.request;
+      let connection = connPool.getChainstackConnection();
+
+      let signer = Keypair.fromSecretKey(bs58.decode(req.walletPrivateKey));
+      resp = await trade_utils.closeTokenAccount(
+        req.tokenAccountAddress,
+        signer,
+        connection,
+        signer.publicKey,
+        signer.publicKey
+    )
+
+      resp = pools.ResponseCloseTokenAccount.create({
+        txSignature: resp,
+        success: true
+    });
+    } catch (error) {
+      console.error(`we got an error when try to close token account. error: ${error}. address: ${call.request.tokenAccountAddress}`)
+      resp = pools.ResponseCloseTokenAccount.create({
+        success: false
+      });
+    }
+
+    callback(null, resp);
+  }
+}
 
 server.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), (error, port) => {
-  server.addService(PoolStateService, impl)
+  server.addService(pools.PoolStateService, impl);
+  server.addService(pools.TokensSolanaService, tokensImpl);
   if (error) {
     throw error
   }
-  console.log(`gRPC server started on port ${port}`);
+
+  console.log(`${error} gRPC server started on port ${port}`);
 });
 

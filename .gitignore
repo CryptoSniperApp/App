@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# custom
+package-lock.json
+proxies.txt
+js/
+others/
+
 # C extensions
 *.so
 

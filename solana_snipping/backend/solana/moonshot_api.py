@@ -23,6 +23,7 @@ class MoonshotAPI:
 
         self._bitquery_wss = "wss://streaming.bitquery.io/eap"
         self._bitquery_token = cfg["bitquery"]["token"]
+        self._bitquery_secret = cfg["bitquery"]["secret"]
         headers = {
             "Sec-WebSocket-Protocol": "graphql-ws",
             "Content-Type": "application/json",
@@ -250,8 +251,46 @@ class MoonshotAPI:
                 self._queues.remove(q)
             except ValueError:
                 pass
+            
+    async def get_token_info(self, mint: str) -> dict:
+        query = ("""
+        query {
+            Solana {
+            DEXTradeByTokens(
+            where: {Trade: {Currency: {MintAddress: {is: "<MINT>", not: "11111111111111111111111111111111"}}, Dex: {ProgramAddress: {is: "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG"}}, Price: {ne: 0}, PriceInUSD: {ne: 0}}, Transaction: {Result: {Success: true}}}
+            orderBy: {descending: Block_Time}
+            limit: {count: 10}
+            ) {
+            Trade {
+                Currency {
+                Decimals
+                }
+                PriceInUSD
+                Price
+            }
+            }
+        }
+        }
 
-    async def _scan_prices_of_mints(self) -> None:
+        """.replace("<MINT>", mint))
+        variables = {
+            "X-API-KEY": self._bitquery_secret,
+            'Authorization': f'Bearer {self._bitquery_token}'
+        }
+        resp = await httpx.AsyncClient().post(
+            "https://streaming.bitquery.io/eap",
+            headers=variables,
+            json={"query": query},
+        ) 
+        data = resp.json()
+        section = data['data']['Solana']['DEXTradeByTokens'][0]
+        return {
+            "usd": section['Trade']['PriceInUSD'],
+            "price": section['Trade']['Price'],
+            "decimals": section['Trade']['Currency']['Decimals']
+        }
+
+    async def   _scan_prices_of_mints(self) -> None:
         query = """
         subscription {
             Solana {
@@ -266,6 +305,7 @@ class MoonshotAPI:
                     MintAddress
                     Name
                     Symbol
+                    Decimals
                     }
                     Dex {
                     ProtocolName
@@ -346,7 +386,7 @@ async def main():
     queue = asyncio.Queue()
 
     return print(
-        await moonshot.get_price_of_mint("3HpCwowzKwHGiYrHTFy3KYiBDnSnpNPsy4Cb3u23Ym8d")
+        await moonshot.get_price_of_mint("FFBDunxagMP9Z79rVFSXaYf58BDkZBSVpiuzEX1v3cKE")
     )
 
     moonshot.subscribe_mint_price_change(

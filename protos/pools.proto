@@ -30,8 +30,82 @@ message ResponsePoolStateOperation {
     ResponsePoolState data = 2;
 }
 
+message RequestSwapTokens {
+    string transaction_type = 1;
+    string mint = 2;
+    float amount = 3;
+    float microlamports = 4;
+    float slippage = 5;
+    string private_key = 6;
+    bool close_account = 7;
+    bool swap_all = 8;
+    string token_account_address = 9;
+    int32 decimal = 10;
+}
+
+message ResponseSwapTokens {
+    string error = 1;
+    string tx_signature = 2;
+    string ms_time_taken = 3;
+    bool success = 4;
+}
+
+
+message CreateTokenAccount {
+    // Create token account for this mint
+    string mint = 1;
+    // Payer and signer of the transaction (wallet private key)
+    string private_key = 2;
+    // Associated token account address (public key)
+    string ata_public_key = 3;
+}
+
+message ResponseCreateTokenAccount {
+    string error = 1;
+    bool success = 2;
+    string tx_signature = 3;
+    string ms_time_taken = 4;
+}
+
+
+message CloseTokenAccount {
+    // Payer and signer of the transaction (wallet private key)
+    string wallet_private_key = 1;
+    // Token account address to close
+    string token_account_address = 2;
+}
+
+
+message ResponseCloseTokenAccount {
+    string error = 1;
+    bool success = 2;
+    string tx_signature = 3;
+    string ms_time_taken = 4;
+}
+
+message GetAssociatedTokenAccount {
+    // Mint address for associated token account
+    string mint_address = 1;
+    // Wallet public key
+    string wallet_public_key = 2;
+}
+
+message ResponseGetAssociatedTokenAccount {
+    string ata_public_key = 1;
+    string error = 2;
+    bool success = 3;
+    string ms_time_taken = 4;
+}
+
 
 service PoolState {
     rpc getPoolState(RequestPoolState) returns (ResponsePoolStateOperation);
+}
+
+service TokensSolana {
+    rpc swapTokens(RequestSwapTokens) returns (ResponseSwapTokens);
+    rpc createTokenAccount(CreateTokenAccount) returns (ResponseCreateTokenAccount);
+    rpc closeTokenAccount(CloseTokenAccount) returns (ResponseCloseTokenAccount);
+    rpc getAssociatedTokenAccount(GetAssociatedTokenAccount) returns (ResponseGetAssociatedTokenAccount);
 }
 

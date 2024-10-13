@@ -1,10 +1,13 @@
 FROM node:alpine
 
 WORKDIR /app
-COPY ts /app
-RUN yarn install
-# RUN apk --no-cache add netcat-openbsd
 
+COPY ts/package.json .
+RUN yarn install
+
+COPY ts /app
+COPY .env /app/.env
 EXPOSE 50051
+
 CMD npx ts-node server.ts
 

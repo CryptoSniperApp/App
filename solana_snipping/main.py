@@ -18,7 +18,7 @@ async def solana_strategy():
     # strategy = RaydiumPools()
     # strategy.subscribe_to_raydium_mints_create(queue=q)
     
-    await asyncio.sleep(1)
+    # await asyncio.sleep(1)
 
     while True:
         signature, mint, dt = await q.get()
