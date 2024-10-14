@@ -56,6 +56,87 @@ class MoonshotAPI:
             hdrs[k] = v
 
         return hdrs
+    
+    async def _scan_new_mints_mainnet_beta(self, q: asyncio.Queue):
+        while True:
+            try:
+                program_address = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG"
+                async with websockets.client.connect(
+                    "wss://api.mainnet-beta.solana.com", ping_interval=None
+                ) as websocket:
+                    msg = orjson.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "logsSubscribe",
+                            "params": [
+                                {"mentions": [program_address]},
+                                {"commitment": "processed"},
+                            ],
+                        }
+                    )
+                    res = await websocket.send(msg)
+
+                    needed_instructions = [
+                        "TokenMint"
+                    ]
+                    while True:
+                        raw = await websocket.recv()
+                        time = datetime.now()
+                        log_data = orjson.loads(raw)
+
+                        try:
+                            instructions = log_data["params"]["result"]["value"]["logs"]
+                        except KeyError:
+                            continue
+
+                        start_pool_instruction_i = next(
+                            (
+                                instructions.index(instr)
+                                for instr in instructions
+                                if instr.count(
+                                    f"Program {program_address} invoke [1]"
+                                )
+                            ),
+                            None,
+                        )
+                        end_pool_instruction_i = next(
+                            (
+                                instructions.index(instr)
+                                for instr in instructions
+                                if instr.count(
+                                    f"Program {program_address} success"
+                                )
+                            ),
+                            None,
+                        )
+                        if not start_pool_instruction_i or not end_pool_instruction_i:
+                            continue
+
+                        signature = log_data["params"]["result"]["value"]["signature"]
+                        pool_instructions = instructions[
+                            start_pool_instruction_i : end_pool_instruction_i + 1
+                        ]
+                        if log_data["params"]["result"]["value"]["err"] or not all(
+                            any(
+                                instruction.lower().count(
+                                    f"Program log: Instruction: {needed_instruction}".lower()
+                                )
+                                for instruction in pool_instructions
+                            )
+                            for needed_instruction in needed_instructions
+                        ):
+                            continue
+
+                        data = (signature, time)
+                        print(data)
+                        await q.put(data)
+            except websockets.exceptions.ConnectionClosedError:
+                await asyncio.sleep(3)
+            except Exception as e:
+                logger.exception(e)
+                raise e
+        
 
     async def subscribe_to_dexscreener_moonshot_mints_create(
         self, queue: asyncio.Queue
@@ -369,7 +450,7 @@ class MoonshotAPI:
                         await asyncio.sleep(5)
                     elif isinstance(e, websockets.exceptions.ConnectionClosedError):
                         logger.error(f"Ошибка соединения WebSocket: {e}")
-                        await asyncio.sleep(3)
+                        # await asyncio.sleep(3)
 
                     if not transport.websocket:
                         await transport.connect()
@@ -385,13 +466,7 @@ async def main():
     moonshot = MoonshotAPI()
     queue = asyncio.Queue()
 
-    return print(
-        await moonshot.get_price_of_mint("FFBDunxagMP9Z79rVFSXaYf58BDkZBSVpiuzEX1v3cKE")
-    )
-
-    moonshot.subscribe_mint_price_change(
-        "3HpCwowzKwHGiYrHTFy3KYiBDnSnpNPsy4Cb3u23Ym8d", queue
-    )
+    await moonshot._scan_new_mints_mainnet_beta(queue)
 
     while True:
         data = await queue.get()

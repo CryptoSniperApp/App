@@ -29,6 +29,7 @@ microservices:
   moonshot:
     private_key: $WALLET_MOONSHOT_PRIVATE_KEY
     rpc_endpoint: $MOONSHOT_RPC_ENDPOINT|https://api.mainnet-beta.solana.com
+    logger_chat_id: "-4561244958"
 
 bitquery:
   token: $BITQUERY_TOKEN

@@ -8,6 +8,7 @@ import {
     TransactionMessage,
     VersionedTransaction,
 } from '@solana/web3.js';
+import * as dotenv from 'dotenv';
 
 
 export async function getTokenAmountInWallet(
@@ -206,6 +207,8 @@ async function sellAll(connection: Connection, kp: Keypair) {
     )
     console.log('accounts', accounts);
     accounts.value.forEach(async (accountInfo) => {
+    // for (let accountInfo of accounts.value) {
+        let amount = accountInfo.account.data["parsed"]["info"]["tokenAmount"]["amount"];
         console.log(`pubkey: ${accountInfo.pubkey.toBase58()}`);
         console.log(`mint: ${accountInfo.account.data["parsed"]["info"]["mint"]}`);
         console.log(
@@ -215,35 +218,37 @@ async function sellAll(connection: Connection, kp: Keypair) {
           `decimals: ${accountInfo.account.data["parsed"]["info"]["tokenAmount"]["decimals"]}`,
         );
         console.log(
-          `amount: ${accountInfo.account.data["parsed"]["info"]["tokenAmount"]["amount"]}`,
+          `amount: ${amount}`,
         );
         console.log("====================");
 
-        let amount = await getTokenAmountInWallet(connection, accountInfo.pubkey.toBase58());
-        console.log('amount', amount);
         if (amount != null && amount >= 1) {
-            await swapTokens(
-                connection,
-                "SELL",
-                accountInfo.account.data["parsed"]["info"]["mint"],
-                base58.encode(kp.secretKey),
-                amount,
-                500,
-                50_000
-            )
+            try {
+                await swapTokens(
+                    connection,
+                    "SELL",
+                    accountInfo.account.data["parsed"]["info"]["mint"],
+                    process.env.WALLET_MOONSHOT_PRIVATE_KEY as string,
+                    amount / (10 ** 9),
+                    500,
+                    50_000,
+                    9,
+                    'confirmed'
+                )
+            } catch (error) {
+                console.error(error);
+            }
         }
-        if ( amount !== 0 ) {
-            return;
-        }
-        await closeTokenAccount(
-            accountInfo.pubkey.toBase58(),
-            kp,
-            connection,
-            kp.publicKey,
-            kp.publicKey
-        );
-
-        // setTimeout(() => {}, 500);
+        // if ( amount !== "0" ) {
+        //     return;
+        // }
+        // await closeTokenAccount(
+        //     accountInfo.pubkey.toBase58(),
+        //     kp,
+        //     connection,
+        //     kp.publicKey,
+        //     kp.publicKey
+        // );
     });
 }
 
@@ -251,12 +256,14 @@ async function sellAll(connection: Connection, kp: Keypair) {
 async function test() {
     let privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
+    // let kp = Keypair.fromSecretKey(base58.decode("37umEJq7z4rsDJwt8DkG5FWsud7oX1iuGzy4iK8wp5qS5E8w6Sv95rpREJdvPF9kC7PCsHEQy3Eqcs39nR8Ee3Pt"));
 
     let mint = 'HWKZt3KL2itEgxHozAbzy7LwFpVFHp777JdpwpfNfGnG';
     const connection = new Connection(process.env.MOONSHOT_RPC_ENDPOINT as string, 'confirmed');
+    // const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
     
     // let resp = await connection.getParsedAccountInfo(new PublicKey(mint));
-    // console.log('resp', resp);
+    // console.log(connection.rpcEndpoint);
     
     // return;
 
@@ -274,7 +281,7 @@ async function test() {
     //     }
     // )
     // console.log(tx);
-
+    // console.log(await getTokenAmountInWallet());
     await sellAll(connection, kp);
     return;
     // let amount = 930;
@@ -307,6 +314,6 @@ async function test() {
 
 }
 
-// test();
+test();
 
   

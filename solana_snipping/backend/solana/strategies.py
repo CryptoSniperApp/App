@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import time
 
@@ -10,6 +10,8 @@ from solders.pubkey import Pubkey
 from typing import Literal
 from solders.rpc.responses import GetTransactionResp
 from grpclib.client import Channel
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from solders.signature import Signature
 
 from solana_snipping.backend.db import create_async_sessiomaker
@@ -344,7 +346,7 @@ class Moonshot:
                 break
             else:
                 if failed > 3:
-                    logger.error(f"Не удалось купить токен - {mint}. Выходим из функции")
+                    logger.warning(f"Не удалось купить токен - {mint}. Выходим из функции")
                     return
                 failed += 1
                 await asyncio.sleep(1)
@@ -361,10 +363,10 @@ class Moonshot:
             f"Результат - {buy_tx_signature}"
         )
         await send_msg_log(message, mint, trans=signature_transaction)
-        # logger.info(message)
+        logger.info(message)
 
         seconds_watch = 60 * 60 * 10  # 10 hours
-        max_seconds_watch_for_selling = 60 * 60 * 2  # 2 hours
+        max_seconds_watch_for_selling = 60 * 5  # 5 minutes
 
         min_percents = 200  # если цена опустилась на этот процент, то выходим из функции
         percents_diff_for_sell_body = 530  # если цена выросла на этот процент, то начинаем продавать тело
@@ -373,6 +375,64 @@ class Moonshot:
         amount_to_sell_first_part_tokens = None  # сколько токенов продали, когда продали тело
         
         dbsession = create_async_sessiomaker()
+        
+        async def sell_all_tokens():
+            nonlocal exit_from_monitor
+            
+            exit_from_monitor = True
+            logger.error(f"Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
+            failed = 0
+            amount = int(buy_amount - 5) if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 5)
+            while True:
+                tx_signature, ms_time_taken, success = await self._swap_tokens(
+                    swap_type="SELL",
+                    mint=mint,
+                    private_wallet_key=self._private_wallet_key,
+                    slippage=5000,
+                    decimal=decimals or None,
+                    amount=amount,
+                    microlamports=100_000,
+                )
+                if failed > 5:
+                    logger.error(f"Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
+                    return
+                
+                if not success:
+                    await asyncio.sleep(5)
+                    failed += 1
+                else:
+                    break
+            
+                await asyncio.sleep(10)
+            failed = 0
+            while True:
+                is_finalized = await self.transaction_finalized(tx_signature)
+                if is_finalized:
+                    break
+                else:
+                    if failed >= 15:
+                        logger.error(f"Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
+                        return
+                    
+                    await asyncio.sleep(5)
+                    failed += 1
+            
+            logger.success(
+                f"Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
+                f"время выполнения - {ms_time_taken} ms, "
+                f"сигнатура - {tx_signature}"
+            )
+            scheduler.remove_job(job.id)
+            
+        scheduler = AsyncIOScheduler()
+        
+        job = scheduler.add_job(
+            sell_all_tokens, 
+            CronTrigger(
+                start_date=datetime.now() + timedelta(seconds=max_seconds_watch_for_selling),
+            ),
+            max_instances=1
+        )
 
         try:
             session = dbsession()
@@ -380,13 +440,16 @@ class Moonshot:
             repo = AnalyticRepository(session)
             sell_all_failed = 0  # счетчик ошибок при продаже всех токенов
 
-            start_watch_time = time.time()  # когда зашли в мониторинг
+            exit_from_monitor = False
             async with asyncio.timeout(seconds_watch):
-                while True:
+                while not exit_from_monitor:
                     try:
                         data, event_mint = await queue.get()
                         if event_mint != mint:
                             continue
+                        
+                        if exit_from_monitor:
+                            return
 
                         price_usd = data["Trade"]["PriceInUSD"]
                         if not first_swap_price:
@@ -407,7 +470,7 @@ class Moonshot:
                         
                         await repo.add_analytic(data)
 
-                        logger.info(
+                        logger.debug(
                             f"Swap price: {first_swap_price}, first swap price: {price_usd}. Percentage diff: {percentage_diff}. mint - {mint}"
                         )
 
@@ -507,51 +570,6 @@ class Moonshot:
                                     if failed >= 3:
                                         logger.error(f"Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
                                         return
-                            
-                        elif (time.time() - start_watch_time) > max_seconds_watch_for_selling:
-                            logger.error(f"Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
-                            failed = 0
-                            amount = int(buy_amount - 5) if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 5)
-                            while True:
-                                tx_signature, ms_time_taken, success = await self._swap_tokens(
-                                    swap_type="SELL",
-                                    mint=mint,
-                                    private_wallet_key=self._private_wallet_key,
-                                    slippage=5000,
-                                    decimal=decimals or None,
-                                    amount=amount,
-                                    microlamports=100_000,
-                                )
-                                if failed > 5:
-                                    logger.error(f"Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
-                                    return
-                                
-                                if not success:
-                                    await asyncio.sleep(5)
-                                    failed += 1
-                                else:
-                                    break
-                            
-                            await asyncio.sleep(10)
-                            failed = 0
-                            while True:
-                                is_finalized = await self.transaction_finalized(tx_signature)
-                                if is_finalized:
-                                    break
-                                else:
-                                    if failed >= 15:
-                                        logger.error(f"Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
-                                        return
-                                    
-                                    await asyncio.sleep(5)
-                                    failed += 1
-                            
-                            logger.success(
-                                f"Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
-                                f"время выполнения - {ms_time_taken} ms, "
-                                f"сигнатура - {tx_signature}"
-                            )
-                            return
                             
                         elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
                             # We are leave from market with token :-(

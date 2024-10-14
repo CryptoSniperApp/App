@@ -1,15 +1,27 @@
 import asyncio
+import logging
 import sys
 import time
 import traceback
 from loguru import logger
 
 from solana_snipping.backend.db import setup
-from solana_snipping.backend.solana.strategies import Moonshot, RaydiumPools
+from solana_snipping.backend.solana.strategies import Moonshot
+from solana_snipping.frontend.telegram.alerting import log_in_chat
+
+
+def setup_logger():
+    def log_tg_filter(record):
+        return record["level"].name not in ["EXCEPTION", "CRITICAL", "ERROR", "DEBUG"]
+
+    logger.add(log_in_chat, filter=log_tg_filter)
+
 
 async def solana_strategy():
     cache = []
     reset_cache = time.time()
+    logging.getLogger("apscheduler").setLevel(logging.CRITICAL)
+    setup_logger()
 
     q = asyncio.Queue()
     
@@ -19,18 +31,18 @@ async def solana_strategy():
     # strategy.subscribe_to_raydium_mints_create(queue=q)
     
     # await asyncio.sleep(1)
-
+    
     while True:
         signature, mint, dt = await q.get()
-
-        if time.time() - reset_cache >= 300:  # if more than 5 minutes have passed
+        
+        if time.time() - reset_cache >= 60 * 15:  # if more than 15 minutes have passed
             cache.clear()
             reset_cache = time.time()
 
-        if signature in cache:
+        if mint in cache:
             continue
 
-        cache.append(signature)
+        cache.append(mint)
         logger.info(f"{signature} - {mint} - {dt}")
 
         try:
