@@ -222,33 +222,33 @@ async function sellAll(connection: Connection, kp: Keypair) {
         );
         console.log("====================");
 
-        if (amount != null && amount >= 1) {
-            try {
-                await swapTokens(
-                    connection,
-                    "SELL",
-                    accountInfo.account.data["parsed"]["info"]["mint"],
-                    process.env.WALLET_MOONSHOT_PRIVATE_KEY as string,
-                    amount / (10 ** 9),
-                    500,
-                    50_000,
-                    9,
-                    'confirmed'
-                )
-            } catch (error) {
-                console.error(error);
-            }
-        }
-        // if ( amount !== "0" ) {
-        //     return;
+        // if (amount != null && amount >= 1) {
+        //     try {
+        //         await swapTokens(
+        //             connection,
+        //             "SELL",
+        //             accountInfo.account.data["parsed"]["info"]["mint"],
+        //             process.env.WALLET_MOONSHOT_PRIVATE_KEY as string,
+        //             amount / (10 ** 9),
+        //             500,
+        //             50_000,
+        //             9,
+        //             'confirmed'
+        //         )
+        //     } catch (error) {
+        //         console.error(error);
+        //     }
         // }
-        // await closeTokenAccount(
-        //     accountInfo.pubkey.toBase58(),
-        //     kp,
-        //     connection,
-        //     kp.publicKey,
-        //     kp.publicKey
-        // );
+        if ( amount !== "0" ) {
+            return;
+        }
+        await closeTokenAccount(
+            accountInfo.pubkey.toBase58(),
+            kp,
+            connection,
+            kp.publicKey,
+            kp.publicKey
+        );
     });
 }
 
@@ -314,6 +314,6 @@ async function test() {
 
 }
 
-test();
+// test();
 
   

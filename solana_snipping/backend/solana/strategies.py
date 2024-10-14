@@ -12,6 +12,7 @@ from solders.rpc.responses import GetTransactionResp
 from grpclib.client import Channel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from solders.signature import Signature
 
 from solana_snipping.backend.db import create_async_sessiomaker
@@ -311,7 +312,7 @@ class Moonshot:
             return False
         
         return True
-        
+
     async def _process_data(
         self,
         mint: str,
@@ -324,8 +325,8 @@ class Moonshot:
         if self._grpc_conn is None:
             self._setup_grpc_stub()
         
-        decimals = 9
-        first_swap_price = None
+        decimals = 9  # количество знаков после запятой     
+        first_swap_price = None  # цена первой покупки
         buy_amount_usd = 0.1 # какой эквивалент в токенах покупаем
         
         buy_amount = 25_000 # сколько токенов покупаем
@@ -380,7 +381,11 @@ class Moonshot:
             nonlocal exit_from_monitor
             
             exit_from_monitor = True
-            logger.error(f"Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
+            if sell_body:
+                return
+            
+            init_msg = f"[ПРОДАЖА ВСЕХ ТОКЕНОВ ПОСЛЕ {max_seconds_watch_for_selling} СЕКУНД]\n"
+            logger.error(f"{init_msg} Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
             failed = 0
             amount = int(buy_amount - 5) if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 5)
             while True:
@@ -394,7 +399,7 @@ class Moonshot:
                     microlamports=100_000,
                 )
                 if failed > 5:
-                    logger.error(f"Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
+                    logger.error(f"{init_msg} Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
                     return
                 
                 if not success:
@@ -411,14 +416,14 @@ class Moonshot:
                     break
                 else:
                     if failed >= 15:
-                        logger.error(f"Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
+                        logger.error(f"{init_msg} Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
                         return
                     
                     await asyncio.sleep(5)
                     failed += 1
             
             logger.success(
-                f"Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
+                f"{init_msg} Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
                 f"время выполнения - {ms_time_taken} ms, "
                 f"сигнатура - {tx_signature}"
             )
@@ -428,11 +433,12 @@ class Moonshot:
         
         job = scheduler.add_job(
             sell_all_tokens, 
-            CronTrigger(
-                start_date=datetime.now() + timedelta(seconds=max_seconds_watch_for_selling),
+            DateTrigger(
+                run_date=datetime.now() + timedelta(seconds=max_seconds_watch_for_selling),       
             ),
             max_instances=1
         )
+        scheduler.start()
 
         try:
             session = dbsession()
@@ -476,6 +482,7 @@ class Moonshot:
 
                         if sell_body and percentage_diff >= percents_diff_for_sell:
                             # продаем оставшиеся токены
+                            init_msg = "[ВЫВОДИМ ОСТАТОК]"
                             while True:
                                 tx_signature, ms_time_taken, success = await self._swap_tokens(
                                     swap_type="SELL",
@@ -488,14 +495,14 @@ class Moonshot:
                                 )
                                 if not success:
                                     logger.error(
-                                        f"Не удалось продать оставшиеся токены. "
+                                        f"{init_msg} Не удалось продать оставшиеся токены. "
                                         f"Сигнатура транзакции - {tx_signature}, "
                                         f"время выполнения - {ms_time_taken} ms"
                                     )
                                     sell_all_failed += 1
                                     await asyncio.sleep(5)
                                     if sell_all_failed >= 5:
-                                        logger.error(f"Не удалось продать оставшиеся токены {mint}. Выходим из функции")
+                                        logger.error(f"{init_msg} Не удалось продать оставшиеся токены {mint}. Выходим из функции")
                                         return
                                     continue
                                 
@@ -508,7 +515,7 @@ class Moonshot:
                                         break
                                     else:
                                         if failed >= 15:
-                                            logger.error(f"Не удалось получить подтверждение для продажи оставшиейся части {mint}. Выходим из функции")
+                                            logger.error(f"{init_msg} Не удалось получить подтверждение для продажи оставшиейся части {mint}. Выходим из функции")
                                             retry = True
                                             break
                                         
@@ -518,11 +525,12 @@ class Moonshot:
                                 if retry:
                                     continue
                                 
-                                logger.success(f"We are swap token {mint}.")
+                                logger.success(f"{init_msg} We are swap token {mint}.")
                                 return
                             
                         elif not sell_body and percentage_diff >= percents_diff_for_sell_body:
                             # проверяем покупку
+                            init_msg = "[ВЫВОДИМ ТЕЛО]"
                             while True:
                                 failed = 0
                                 while True:
@@ -531,7 +539,7 @@ class Moonshot:
                                         break
                                     else:
                                         if failed >= 3:
-                                            logger.error(f"Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
+                                            logger.error(f"{init_msg} Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
                                             return
                                         
                                         await asyncio.sleep(8)
@@ -557,18 +565,18 @@ class Moonshot:
                                             break
                                         else:
                                             if failed > 10:
-                                                logger.error(f"Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
+                                                logger.error(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
                                                 return
                                             await asyncio.sleep(5)
                                             failed += 1
                                     
                                     sell_body = True
-                                    logger.success(f"We are sell body for mint - {mint}")
+                                    logger.success(f"{init_msg} We are sell body for mint - {mint}")
                                     break
                                 else:
                                     failed += 1
                                     if failed >= 3:
-                                        logger.error(f"Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
+                                        logger.error(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
                                         return
                             
                         elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
