@@ -389,7 +389,6 @@ class Moonshot:
             if not (price_usd and price_usd < first_swap_price):
                 return
             
-            exit_from_monitor = True
             init_msg = f"[ЦЕНА ({price_usd}) УПАЛА НИЖЕ ЦЕНЫ ПЕРВОЙ ПОКУПКИ ({first_swap_price})]\n"
             
             failed = 0
@@ -447,6 +446,7 @@ class Moonshot:
                 f"время выполнения - {ms_time_taken} ms, "
                 f"сигнатура - {tx_signature}"
             )
+            exit_from_monitor = True
             scheduler.remove_job(job.id)
             
         scheduler = AsyncIOScheduler()
