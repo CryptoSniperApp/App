@@ -385,7 +385,21 @@ class Moonshot:
                 return
             
             init_msg = f"[ПРОДАЖА ВСЕХ ТОКЕНОВ ПОСЛЕ {max_seconds_watch_for_selling} СЕКУНД]\n"
-            logger.error(f"{init_msg} Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
+            
+            failed = 0
+            while True:
+                is_finalized = await self.transaction_finalized(buy_tx_signature)
+                if is_finalized:
+                    break
+                else:
+                    if failed >= 3:
+                        logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
+                        return
+                    
+                    await asyncio.sleep(8)
+                    failed += 1
+            
+            logger.info(f"{init_msg} Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
             failed = 0
             amount = int(buy_amount - 5) if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 5)
             while True:
@@ -399,7 +413,7 @@ class Moonshot:
                     microlamports=100_000,
                 )
                 if failed > 5:
-                    logger.error(f"{init_msg} Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
+                    logger.info(f"{init_msg} Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
                     return
                 
                 if not success:
@@ -416,7 +430,7 @@ class Moonshot:
                     break
                 else:
                     if failed >= 15:
-                        logger.error(f"{init_msg} Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
+                        logger.info(f"{init_msg} Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
                         return
                     
                     await asyncio.sleep(5)
@@ -494,7 +508,7 @@ class Moonshot:
                                     microlamports=50_000
                                 )
                                 if not success:
-                                    logger.error(
+                                    logger.info(
                                         f"{init_msg} Не удалось продать оставшиеся токены. "
                                         f"Сигнатура транзакции - {tx_signature}, "
                                         f"время выполнения - {ms_time_taken} ms"
@@ -502,7 +516,7 @@ class Moonshot:
                                     sell_all_failed += 1
                                     await asyncio.sleep(5)
                                     if sell_all_failed >= 5:
-                                        logger.error(f"{init_msg} Не удалось продать оставшиеся токены {mint}. Выходим из функции")
+                                        logger.info(f"{init_msg} Не удалось продать оставшиеся токены {mint}. Выходим из функции")
                                         return
                                     continue
                                 
@@ -515,7 +529,7 @@ class Moonshot:
                                         break
                                     else:
                                         if failed >= 15:
-                                            logger.error(f"{init_msg} Не удалось получить подтверждение для продажи оставшиейся части {mint}. Выходим из функции")
+                                            logger.info(f"{init_msg} Не удалось получить подтверждение для продажи оставшиейся части {mint}. Выходим из функции")
                                             retry = True
                                             break
                                         
@@ -539,7 +553,7 @@ class Moonshot:
                                         break
                                     else:
                                         if failed >= 3:
-                                            logger.error(f"{init_msg} Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
+                                            logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
                                             return
                                         
                                         await asyncio.sleep(8)
@@ -565,7 +579,7 @@ class Moonshot:
                                             break
                                         else:
                                             if failed > 10:
-                                                logger.error(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
+                                                logger.info(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
                                                 return
                                             await asyncio.sleep(5)
                                             failed += 1
@@ -576,7 +590,7 @@ class Moonshot:
                                 else:
                                     failed += 1
                                     if failed >= 3:
-                                        logger.error(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
+                                        logger.info(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
                                         return
                             
                         elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
