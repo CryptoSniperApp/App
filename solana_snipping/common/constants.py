@@ -6,6 +6,7 @@ from solana_snipping.common.config import get_config
 USDT_ADDR = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
 SOL_ADDR = "So11111111111111111111111111111111111111112"
 WSOL_ADDR = "So11111111111111111111111111111111111111112"
+SOLANA_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 
 cfg = get_config()
 _networks = cfg["chains"]["solana"]["networks"]

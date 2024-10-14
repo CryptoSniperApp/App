@@ -29,9 +29,9 @@ export async function swapTokens(
     slippageBps: number | null = null,
     microLamports: number | null = null,
     decimals: number | null = null,
-    // commitment: web3.Commitment = 'recent',
+    commitment: web3.Commitment = 'recent',
     // commitment: web3.Commitment = 'processed',
-    commitment: web3.Commitment = 'singleGossip',
+    // commitment: web3.Commitment = 'singleGossip',
 ): Promise<[string, number]> {
     if (!slippageBps) {
         slippageBps = 500;
@@ -222,24 +222,24 @@ async function sellAll(connection: Connection, kp: Keypair) {
         );
         console.log("====================");
 
-        // if (amount != null && amount >= 1) {
-        //     try {
-        //         await swapTokens(
-        //             connection,
-        //             "SELL",
-        //             accountInfo.account.data["parsed"]["info"]["mint"],
-        //             process.env.WALLET_MOONSHOT_PRIVATE_KEY as string,
-        //             amount / (10 ** 9),
-        //             500,
-        //             50_000,
-        //             9,
-        //             'confirmed'
-        //         )
-        //     } catch (error) {
-        //         console.error(error);
-        //     }
-        // }
-        if ( amount !== "0" ) {
+        if (amount != null && amount == 5 * (10 ** 9)   ) {
+            try {
+                await swapTokens(
+                    connection,
+                    "SELL",
+                    accountInfo.account.data["parsed"]["info"]["mint"],
+                    process.env.WALLET_MOONSHOT_PRIVATE_KEY as string,
+                    amount / (10 ** 9),
+                    500,
+                    50_000,
+                    9,
+                    'confirmed'
+                )
+            } catch (error) {
+                console.error(error);
+            }
+        }
+        if ( `${amount}` !== "0" ) {
             return;
         }
         await closeTokenAccount(

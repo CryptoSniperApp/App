@@ -13,6 +13,7 @@ from grpclib.client import Channel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from solders.signature import Signature
 
 from solana_snipping.backend.db import create_async_sessiomaker
@@ -256,7 +257,7 @@ class Moonshot:
         swap_type: Literal["BUY", "SELL"], 
         mint: str, 
         private_wallet_key: str, 
-        amount: int,
+        amount: int = 0,
         microlamports: int | None = None, 
         slippage: int | None = None,
         swap_all: bool = False,
@@ -367,24 +368,29 @@ class Moonshot:
         logger.info(message)
 
         seconds_watch = 60 * 60 * 10  # 10 hours
-        max_seconds_watch_for_selling = 60 * 5  # 5 minutes
+        interval_seconds_for_check_price = 60 * 5  # 5 minutes
 
         min_percents = 200  # если цена опустилась на этот процент, то выходим из функции
         percents_diff_for_sell_body = 530  # если цена выросла на этот процент, то начинаем продавать тело
         percents_diff_for_sell = percents_diff_for_sell_body + 500  # если цена выросла на этот процент, то продаем остаток
         sell_body = False  # когда продали тело, ставим в True
         amount_to_sell_first_part_tokens = None  # сколько токенов продали, когда продали тело
+        price_usd = None  # цена в данный момент
         
         dbsession = create_async_sessiomaker()
         
         async def sell_all_tokens():
             nonlocal exit_from_monitor
             
-            exit_from_monitor = True
-            if sell_body:
+            # продаем только в том случае, если цена упала ниже цены первой покупки
+            # иначе выходим из функции.
+            # price_usd - цена в данный момент
+            # first_swap_price - цена первой покупки
+            if not (price_usd and price_usd < first_swap_price):
                 return
             
-            init_msg = f"[ПРОДАЖА ВСЕХ ТОКЕНОВ ПОСЛЕ {max_seconds_watch_for_selling} СЕКУНД]\n"
+            exit_from_monitor = True
+            init_msg = f"[ЦЕНА ({price_usd}) УПАЛА НИЖЕ ЦЕНЫ ПЕРВОЙ ПОКУПКИ ({first_swap_price})]\n"
             
             failed = 0
             while True:
@@ -393,15 +399,15 @@ class Moonshot:
                     break
                 else:
                     if failed >= 3:
-                        logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
+                        logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки ({mint})")
                         return
                     
                     await asyncio.sleep(8)
                     failed += 1
             
-            logger.info(f"{init_msg} Не удалось продать токен {mint} в течение {max_seconds_watch_for_selling} секунд из за того что не выросла цена в нужном проценте. Продаем все")
+            logger.info(f"{init_msg}. С момента первой покупки прошло {time.time() - start_function_time} секунд ({mint}). Продаем все")
             failed = 0
-            amount = int(buy_amount - 5) if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 5)
+            amount = buy_amount if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 20)
             while True:
                 tx_signature, ms_time_taken, success = await self._swap_tokens(
                     swap_type="SELL",
@@ -412,8 +418,8 @@ class Moonshot:
                     amount=amount,
                     microlamports=100_000,
                 )
-                if failed > 5:
-                    logger.info(f"{init_msg} Не удалось продать все токены при продаже из за отсутствия роста цены - {mint}. Выходим из функции")
+                if failed > 15:
+                    logger.info(f"{init_msg} Не удалось продать все токены из за неудачной транзакции ({mint})")
                     return
                 
                 if not success:
@@ -430,7 +436,7 @@ class Moonshot:
                     break
                 else:
                     if failed >= 15:
-                        logger.info(f"{init_msg} Не удалось получить подтверждение транзакции при продаже токенов из за отсутствия роста цены {mint}. Выходим из функции")
+                        logger.info(f"{init_msg} Не удалось подтвердить продажу токенов - непроверенная транзакция ({mint})")
                         return
                     
                     await asyncio.sleep(5)
@@ -447,8 +453,8 @@ class Moonshot:
         
         job = scheduler.add_job(
             sell_all_tokens, 
-            DateTrigger(
-                run_date=datetime.now() + timedelta(seconds=max_seconds_watch_for_selling),       
+            IntervalTrigger(
+                seconds=interval_seconds_for_check_price,       
             ),
             max_instances=1
         )
@@ -641,9 +647,18 @@ async def main():
     # await asyncio.sleep(10000)
 
     async with m:
-        sig = "2c6rXrPVzzSHZAF4D8EQJz5kWEw8rZRL52tuSGdaPYY6aLdaKURZnEXMGdUor8vg84NUoqdXS1rhDKQaJiEGPz8v"
-        r = await m.transaction_finalized(sig)
-        print(r)
+        ...
+        # await m._swap_tokens(
+        #     swap_type="SELL",
+        #     mint="4BqSTuvKUvQbqpjRYf9egVjou16F32aThHz39EnBF7kn",
+        #     private_wallet_key=m._private_wallet_key,
+        #     # amount=5,
+        #     slippage=500,
+        #     decimal=9,
+        #     microlamports=100_000,
+        #     swap_all=True,
+        #     close_account=True,
+        # )
     ...
 
 
