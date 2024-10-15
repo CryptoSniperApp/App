@@ -17,20 +17,8 @@ from solana_snipping.backend.utils import asyncio_callbacks
 class MoonshotAPI:
     def __init__(self):
         self.base_url = "https://api.moonshot.cc/trades/v2/latest/solana"
-        cfg = get_config()
-        networks = cfg["chains"]["solana"]["networks"]
-        self._wss_mainnet_beta = networks["mainnet-beta"]["websocket"]
 
         self._bitquery_wss = "wss://streaming.bitquery.io/eap"
-        self._bitquery_token = cfg["bitquery"]["token"]
-        self._bitquery_secret = cfg["bitquery"]["secret"]
-        headers = {
-            "Sec-WebSocket-Protocol": "graphql-ws",
-            "Content-Type": "application/json",
-        }
-        url = f"{self._bitquery_wss}?token={self._bitquery_token}"
-        self._bitquery = WebsocketsTransport(url=url, headers=headers)
-
         self._httpx_client = httpx.AsyncClient()
 
         self._mints_to_watch = []
@@ -38,6 +26,22 @@ class MoonshotAPI:
 
         self._mints_price_watch = []
         self._mints_price_watch_queues = []
+    
+    @property
+    def bitquery_token(self):
+        cfg = get_config()
+        return cfg["bitquery"]["token"]
+        
+    @property
+    def bitquery_secret(self):
+        cfg = get_config()
+        return cfg["bitquery"]["secret"]
+    
+    @property
+    def wss_mainnet_beta(self):
+        cfg = get_config()
+        networks = cfg["chains"]["solana"]["networks"]
+        return networks["mainnet-beta"]["websocket"]
 
     @property
     def _hdrs(self):
@@ -147,7 +151,7 @@ class MoonshotAPI:
             "Sec-WebSocket-Protocol": "graphql-ws",
             "Content-Type": "application/json",
         }
-        url = f"{self._bitquery_wss}?token={self._bitquery_token}"
+        url = f"{self._bitquery_wss}?token={self.bitquery_token}"
         transport = WebsocketsTransport(
             url=url, headers=headers, ping_interval=20, pong_timeout=60
         )
@@ -160,7 +164,7 @@ class MoonshotAPI:
                     gql_query = gql(
                         """
                         subscription {
-                            Solana {
+                            Solana(trigger_on: all) {
                                 Instructions(
                                 where: {Instruction: {Program: {Method: {is: "tokenMint"}, Address: {is: "<MOONSHOT_ADDRESS>"}}, Accounts: {includes: {Token: {Mint: {not: ""}}}}}, Transaction: {Result: {Success: true}}}
                                 ) {
@@ -228,7 +232,12 @@ class MoonshotAPI:
             return None
 
     async def _send_bitquery_moonshot_subscription(self):
-        transport = self._bitquery
+        headers = {
+            "Sec-WebSocket-Protocol": "graphql-ws",
+            "Content-Type": "application/json",
+        }
+        url = f"{self._bitquery_wss}?token={self.bitquery_token}"
+        transport = WebsocketsTransport(url=url, headers=headers)
 
         if not transport.websocket:
             await transport.connect()
@@ -355,8 +364,8 @@ class MoonshotAPI:
 
         """.replace("<MINT>", mint))
         variables = {
-            "X-API-KEY": self._bitquery_secret,
-            'Authorization': f'Bearer {self._bitquery_token}'
+            "X-API-KEY": self.bitquery_secret,
+            'Authorization': f'Bearer {self.bitquery_token}'
         }
         resp = await httpx.AsyncClient().post(
             "https://streaming.bitquery.io/eap",
@@ -371,7 +380,7 @@ class MoonshotAPI:
             "decimals": section['Trade']['Currency']['Decimals']
         }
 
-    async def   _scan_prices_of_mints(self) -> None:
+    async def _scan_prices_of_mints(self) -> None:
         query = """
         subscription {
             Solana {
@@ -415,7 +424,7 @@ class MoonshotAPI:
             "Sec-WebSocket-Protocol": "graphql-ws",
             "Content-Type": "application/json",
         }
-        url = f"{self._bitquery_wss}?token={self._bitquery_token}"
+        url = f"{self._bitquery_wss}?token={self.bitquery_token}"
         transport = WebsocketsTransport(
             url=url, headers=headers, ping_interval=20, pong_timeout=60
         )

@@ -340,9 +340,9 @@ class Moonshot:
                 mint=mint,
                 private_wallet_key=self._private_wallet_key,
                 amount=buy_amount,
-                slippage=5000,
+                slippage=3500,
                 decimal=decimals or None,
-                microlamports=100_000
+                microlamports=200_000
             )
             if success:
                 break
@@ -376,20 +376,18 @@ class Moonshot:
         sell_body = False  # когда продали тело, ставим в True
         amount_to_sell_first_part_tokens = None  # сколько токенов продали, когда продали тело
         price_usd = None  # цена в данный момент
+        price_updated_at = time.time()
         
         dbsession = create_async_sessiomaker()
         
         async def sell_all_tokens():
             nonlocal exit_from_monitor
             
-            # продаем только в том случае, если цена упала ниже цены первой покупки
-            # иначе выходим из функции.
-            # price_usd - цена в данный момент
-            # first_swap_price - цена первой покупки
-            if not (price_usd and price_usd < first_swap_price):
+            max_time = 60 * 30  # 30 minutes
+            if time.time() - price_updated_at < max_time:
                 return
             
-            init_msg = f"[ЦЕНА ({price_usd}) УПАЛА НИЖЕ ЦЕНЫ ПЕРВОЙ ПОКУПКИ ({first_swap_price})]\n"
+            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ 30 МИНУТ]"
             
             failed = 0
             while True:
@@ -399,12 +397,13 @@ class Moonshot:
                 else:
                     if failed >= 3:
                         logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки ({mint})")
+                        exit_from_monitor = True
                         return
                     
                     await asyncio.sleep(8)
                     failed += 1
             
-            logger.info(f"{init_msg}. С момента первой покупки прошло {time.time() - start_function_time} секунд ({mint}). Продаем все")
+            logger.info(f"{init_msg}. С момента первой покупки прошло {int(time.time() - start_function_time)} секунд ({mint}). Продаем все")
             failed = 0
             amount = buy_amount if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 20)
             while True:
@@ -412,7 +411,7 @@ class Moonshot:
                     swap_type="SELL",
                     mint=mint,
                     private_wallet_key=self._private_wallet_key,
-                    slippage=5000,
+                    slippage=1000,
                     decimal=decimals or None,
                     amount=amount,
                     microlamports=100_000,
@@ -471,13 +470,14 @@ class Moonshot:
                 while not exit_from_monitor:
                     try:
                         data, event_mint = await queue.get()
+                        if exit_from_monitor:
+                            return
+                        
                         if event_mint != mint:
                             continue
                         
-                        if exit_from_monitor:
-                            return
-
                         price_usd = data["Trade"]["PriceInUSD"]
+                        price_updated_at = time.time()
                         if not first_swap_price:
                             first_swap_price = float(price_usd)
                             
@@ -508,7 +508,7 @@ class Moonshot:
                                     swap_type="SELL",
                                     mint=mint,
                                     private_wallet_key=self._private_wallet_key,
-                                    slippage=5000,
+                                    slippage=3500,
                                     decimal=decimals or None,
                                     amount=int((buy_amount - amount_to_sell_first_part_tokens) - 5),
                                     microlamports=50_000
@@ -535,7 +535,7 @@ class Moonshot:
                                         break
                                     else:
                                         if failed >= 15:
-                                            logger.info(f"{init_msg} Не удалось получить подтверждение для продажи оставшиейся части {mint}. Выходим из функции")
+                                            logger.info(f"{init_msg} Не удалось получить подтверждение для продажи оставшиейся части токенов {mint}")
                                             retry = True
                                             break
                                         
@@ -545,7 +545,7 @@ class Moonshot:
                                 if retry:
                                     continue
                                 
-                                logger.success(f"{init_msg} We are swap token {mint}.")
+                                logger.success(f"{init_msg} Мы успешно вывели все оставшиеся токены {mint}.")
                                 return
                             
                         elif not sell_body and percentage_diff >= percents_diff_for_sell_body:
@@ -571,7 +571,7 @@ class Moonshot:
                                     swap_type="SELL",
                                     mint=mint,
                                     private_wallet_key=self._private_wallet_key,
-                                    slippage=5000,
+                                    slippage=3500,
                                     decimal=decimals or None,
                                     amount=amount_to_sell_first_part_tokens,
                                     microlamports=200_000,
