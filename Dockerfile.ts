@@ -9,5 +9,5 @@ COPY ts /app
 COPY .env /app/.env
 EXPOSE 50051
 
-CMD npx ts-node server.ts
+CMD ts-node server.ts
 

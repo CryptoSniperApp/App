@@ -509,7 +509,7 @@ async function test() {
     //     kp.publicKey,
     //     kp.publicKey
     // );
-    await sellAll(connection, kp);
+    // await sellAll(connection, kp);
 }
 
 
@@ -517,4 +517,4 @@ export const privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
 export const kp = Keypair.fromSecretKey(base58.decode(privateKey));
 
 
-test();
+// test();
