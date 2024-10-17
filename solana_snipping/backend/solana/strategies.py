@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 import random
+import re
 import time
 
 from loguru import logger
@@ -15,6 +16,10 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from solders.signature import Signature
+from solana.rpc.async_api import AsyncClient
+from solana.rpc.types import TokenAccountOpts
+from solders.keypair import Keypair
+
 
 from solana_snipping.backend.db import create_async_sessiomaker
 from solana_snipping.backend.db.repositories import AnalyticRepository
@@ -23,7 +28,7 @@ from solana_snipping.backend.solana.monitor import SolanaMonitor
 from solana_snipping.backend.solana.moonshot_api import MoonshotAPI
 from solana_snipping.backend.utils import format_number_decimal, get_proxies
 from solana_snipping.common.app_types import AnalyticData
-from solana_snipping.common.constants import SOL_ADDR
+from solana_snipping.common.constants import SOL_ADDR, SOLANA_TOKEN_PROGRAM_ID
 from solana_snipping.frontend.telegram.alerting import send_msg_log
 from solana_snipping.backend.utils import asyncio_callbacks
 from solana_snipping.backend.proto_generated.pools import PoolStateStub, TokensSolanaStub
@@ -196,6 +201,7 @@ class Moonshot:
         self._loop = asyncio.get_running_loop()
         self._futures = []
         self._grpc_conn = None
+        self._alock = asyncio.Lock()
         
     async def __aenter__(self):
         self._setup_grpc_stub()
@@ -309,10 +315,95 @@ class Moonshot:
             Signature.from_string(signature), commitment="finalized",
             max_supported_transaction_version=0
         )
-        if resp.value is None or resp.value.slot is None or resp.value.transaction.meta.err:
+        if resp.value is None or resp.value.slot is None:
             return False
         
         return True
+    
+    async def sell_all_tokens(self, close_token_account: bool = True):
+        cfg = get_config()
+        if self._grpc_conn is None:
+            grpc_cfg = cfg["microservices"]["grpc"]
+            ch = Channel(grpc_cfg["host"], grpc_cfg["port"])
+            conn_grpc = TokensSolanaStub(ch)
+        else:
+            conn_grpc = self._grpc_conn
+            
+        rpc_endpoint = cfg["microservices"]["moonshot"]["rpc_endpoint"]
+        connection = AsyncClient(rpc_endpoint, commitment="finalized")
+        
+        private_key = cfg["microservices"]["moonshot"]["private_key"]
+        kp = Keypair.from_base58_string(private_key)
+        async with self._alock:
+            accounts = await connection.get_token_accounts_by_owner_json_parsed(
+                kp.pubkey(),
+                TokenAccountOpts(
+                    program_id=Pubkey.from_string(SOLANA_TOKEN_PROGRAM_ID)
+                ),
+            )
+            for val in accounts.value:
+                account = val.account
+                
+                amount = int(account.data.parsed['info']['tokenAmount']['uiAmount'])
+                if 0 < amount <= 100:
+                    await conn_grpc.swap_tokens(
+                        transaction_type="SELL",
+                        mint=account.data.parsed["info"]["mint"],
+                        amount=amount,
+                        microlamports=100_000,
+                        slippage=2000,
+                        private_key=private_key,
+                        decimal=account.data.parsed['info']['tokenAmount']['decimals'],
+                    )
+                elif amount == 0 and close_token_account:
+                    await conn_grpc.close_token_account(
+                        wallet_private_key=private_key,
+                        token_account_address=str(val.pubkey)
+                    )
+                    
+    async def _get_error_transaction(self, signature: str) -> str:
+        endpoint = get_config()["microservices"]["moonshot"]["rpc_endpoint"]
+        client = AsyncClient(
+            endpoint,
+            commitment="finalized"
+        )
+        
+        resp: GetTransactionResp = await client.get_transaction(
+            Signature.from_string(signature), 
+            commitment="finalized",
+            max_supported_transaction_version=0
+        )
+        
+        if resp.value is None or resp.value.slot is None:
+            raise ValueError("Transaction not finalized in blockchain!")
+        
+        if resp.value.transaction.meta.err:
+            pattern = r"[eE]rror [Mm]essage([: ]){0,3}(.+)"
+            res = re.search(pattern, "\n".join(resp.value.transaction.meta.log_messages))
+            return res.group(2) if res else ""
+            
+        return ""
+    
+    async def is_transaction_success(self, signature: str, retries: int = 5) -> tuple[bool, str]:
+        failed = 0
+        while True:
+            is_finalized = await self.transaction_finalized(signature)
+            if is_finalized:
+                break
+            else:
+                if failed >= retries:
+                    return False, "NOT FINALIZED"
+                
+                await asyncio.sleep(8)
+                failed += 1
+        
+        error = await self._get_error_transaction(signature)
+        if error:
+            return False, error
+        
+        return True, error
+    
+    
 
     async def _process_data(
         self,
@@ -328,9 +419,9 @@ class Moonshot:
         
         decimals = 9  # количество знаков после запятой     
         first_swap_price = None  # цена первой покупки
-        buy_amount_usd = 0.1 # какой эквивалент в токенах покупаем
+        buy_amount_usd = 0.3 # какой эквивалент в токенах покупаем
         
-        buy_amount = 25_000 # сколько токенов покупаем
+        buy_amount = 50_000 # сколько токенов покупаем
         start_function_time = time.time()
         
         failed = 0
@@ -345,6 +436,10 @@ class Moonshot:
                 microlamports=200_000
             )
             if success:
+                is_buy_success, error = await self.is_transaction_success(signature=buy_tx_signature, retries=3)
+                if not is_buy_success or error:
+                    return
+                
                 break
             else:
                 if failed > 3:
@@ -353,7 +448,7 @@ class Moonshot:
                 failed += 1
                 await asyncio.sleep(1)
         
-        end_function_time = time.time()    
+        end_function_time = time.time() 
         capture_time = datetime.now()
         message = (
             f"ТИП - MOONSHOT DEXSCREENER\n"
@@ -378,31 +473,17 @@ class Moonshot:
         price_usd = None  # цена в данный момент
         price_updated_at = time.time()
         
+        end_log_msg = "Сигнатура транзакциии {signature}. Минт адрес {mint}"
         dbsession = create_async_sessiomaker()
         
         async def sell_all_tokens():
             nonlocal exit_from_monitor
             
-            max_time = 60 * 30  # 30 minutes
+            max_time = 60 * 60  # 1 hour
             if time.time() - price_updated_at < max_time:
                 return
             
-            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ 30 МИНУТ]"
-            
-            failed = 0
-            while True:
-                is_finalized = await self.transaction_finalized(buy_tx_signature)
-                if is_finalized:
-                    break
-                else:
-                    if failed >= 3:
-                        logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки ({mint})")
-                        exit_from_monitor = True
-                        return
-                    
-                    await asyncio.sleep(8)
-                    failed += 1
-            
+            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЙ ЧАС]"
             logger.info(f"{init_msg}. С момента первой покупки прошло {int(time.time() - start_function_time)} секунд ({mint}). Продаем все")
             failed = 0
             amount = buy_amount if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 20)
@@ -427,18 +508,15 @@ class Moonshot:
                     break
             
                 await asyncio.sleep(10)
-            failed = 0
-            while True:
-                is_finalized = await self.transaction_finalized(tx_signature)
-                if is_finalized:
-                    break
+            
+            is_success, error = await self.is_transaction_success(tx_signature)
+            if not is_success:
+                if error.count("to be already initialized"):
+                    exit_from_monitor = True
+                    scheduler.remove_job(job.id)
+                    return
                 else:
-                    if failed >= 15:
-                        logger.info(f"{init_msg} Не удалось подтвердить продажу токенов - непроверенная транзакция ({mint})")
-                        return
-                    
-                    await asyncio.sleep(5)
-                    failed += 1
+                    logger.error(f"{init_msg} Получили ошибку после попытки продать все токены. {error}")    
             
             logger.success(
                 f"{init_msg} Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
@@ -552,20 +630,8 @@ class Moonshot:
                             # проверяем покупку
                             init_msg = "[ВЫВОДИМ ТЕЛО]"
                             while True:
-                                failed = 0
-                                while True:
-                                    is_finalized = await self.transaction_finalized(buy_tx_signature)
-                                    if is_finalized:
-                                        break
-                                    else:
-                                        if failed >= 3:
-                                            logger.info(f"{init_msg} Не удалось получить подтверждение для первой покупки {mint}. Выходим из функции")
-                                            return
-                                        
-                                        await asyncio.sleep(8)
-                                        failed += 1
-                                
                                 # продаем вложенные 10 центов
+                                sell_body = True
                                 amount_to_sell_first_part_tokens = buy_amount_usd / price_usd
                                 tx_signature, ms_time_taken, success = await self._swap_tokens(
                                     swap_type="SELL",
@@ -590,7 +656,6 @@ class Moonshot:
                                             await asyncio.sleep(5)
                                             failed += 1
                                     
-                                    sell_body = True
                                     logger.success(f"{init_msg} We are sell body for mint - {mint}")
                                     break
                                 else:
@@ -616,6 +681,7 @@ class Moonshot:
             await session.__aexit__(None, None, None)
             self._moonshot_client._mints_price_watch_queues.remove(queue)
             self._moonshot_client._mints_price_watch.remove(mint)
+            scheduler.shutdown(wait=False)
 
     def subscribe_to_moonshot_mints_create(self, queue: asyncio.Queue):
         loop = asyncio.get_running_loop()
@@ -633,6 +699,7 @@ class Moonshot:
 
 async def main():
     from solana.rpc.api import Client
+    from solana.rpc.async_api import AsyncClient
     from solders.signature import Signature
     
     m = Moonshot()
@@ -644,9 +711,17 @@ async def main():
     # m._moonshot_client._mints_price_watch.append(mint)
     # m.handle_transaction(mint=mint, transaction_received=datetime.now(), signature="")
     
+    cl = AsyncClient('https://api.mainnet-beta.solana.com')
+    sig = Signature.from_string("5Fw2sLfHaqiqNdi5WMEg1ZDVhEec5nebGHeJrJWjYWSFb9Nw9GkZU2jTqEwyHtqD9LrBxdrk66fapkYMsNjU6EQ6")
+    res = await cl.get_transaction(sig, max_supported_transaction_version=0)
+    print(res)
+    return
+    
     # await asyncio.sleep(10000)
 
     async with m:
+        r = await m._get_error_transaction("27ngVS9GQP81xRJckzFsbG1RUonphP4KYcrCd32UeQHQR4qvn41BJUNdxrPtKBiCBvsypYQVYKaXrhhVXtyygDcL")
+        print(r)
         ...
         # await m._swap_tokens(
         #     swap_type="SELL",

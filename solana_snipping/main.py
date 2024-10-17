@@ -6,9 +6,6 @@ import time
 import traceback
 from grpclib.client import Channel
 from loguru import logger
-from solana.rpc.async_api import AsyncClient
-from solana.rpc.types import TokenAccountOpts
-from solders.keypair import Keypair
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from solders.pubkey import Pubkey
 
@@ -36,53 +33,6 @@ def setup_logger():
     logger.add(log_in_chat, filter=log_tg_filter)
 
 
-async def sell_all_tokens(
-    close_token_account: bool = True, 
-    conn_grpc: TokensSolanaStub = None
-):
-    cfg = get_config()
-    if conn_grpc is None:
-        grpc_cfg = cfg["microservices"]["grpc"]
-        ch = Channel(grpc_cfg["host"], grpc_cfg["port"])
-        conn_grpc = TokensSolanaStub(ch)
-        
-    rpc_endpoint = cfg["microservices"]["moonshot"]["rpc_endpoint"]
-    connection = AsyncClient(rpc_endpoint, commitment="confirmed")
-    
-    private_key = cfg["microservices"]["moonshot"]["private_key"]
-    kp = Keypair.from_base58_string(private_key)
-    try:
-        accounts = await connection.get_token_accounts_by_owner_json_parsed(
-            kp.pubkey(),
-            TokenAccountOpts(
-                program_id=Pubkey.from_string(SOLANA_TOKEN_PROGRAM_ID)
-            ),
-        )
-        
-        for val in accounts.value:
-            account = val.account
-            
-            amount = int(account.data.parsed['info']['tokenAmount']['uiAmount'])
-            if 0 < amount <= 100:
-                await conn_grpc.swap_tokens(
-                    transaction_type="SELL",
-                    mint=account.data.parsed["info"]["mint"],
-                    amount=amount,
-                    microlamports=100_000,
-                    slippage=2000,
-                    private_key=private_key,
-                    decimal=account.data.parsed['info']['tokenAmount']['decimals'],
-                )
-            elif amount == 0 and close_token_account:
-                await conn_grpc.close_token_account(
-                    wallet_private_key=private_key,
-                    token_account_address=str(val.pubkey)
-                )
-    finally:
-        await connection.close()
-        conn_grpc.channel.close()
-
-
 async def solana_strategy():
     cache = []
     reset_cache = time.time()
@@ -93,6 +43,7 @@ async def solana_strategy():
     
     strategy = Moonshot()
     strategy.subscribe_to_moonshot_mints_create(queue=q)
+    MAIN_SCHEDULER.add_job(strategy.sell_all_tokens, "interval", seconds=60 * 5, max_instances=1)
 
     while True:
         signature, mint, dt = await q.get()
@@ -116,7 +67,6 @@ async def solana_strategy():
 async def main():
     logging.getLogger("apscheduler").setLevel(logging.CRITICAL)
     MAIN_SCHEDULER.add_job(mock_async_task, "date", run_date=datetime.now())
-    MAIN_SCHEDULER.add_job(sell_all_tokens, "interval", seconds=60 * 5)
     MAIN_SCHEDULER.start()
 
     await setup()
