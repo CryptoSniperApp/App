@@ -62,16 +62,47 @@ export async function swapTokens(
     } catch (error) {
         console.log('Error getting curve position: ', error);
         let start = Date.now();
-        let res = null;
+        let res: any;
+
+        let meteoraPoolAddress;
+        for (let i = 0; i < 10; i++) {
+            try {
+                meteoraPoolAddress = await getPoolByMintMeteora(mintAddress)
+                break;
+            } catch {
+                continue;
+            }
+        }
+
+        if (meteoraPoolAddress) {
+            let taken;
+            [res, taken] = await swapMeteoraTokens(
+                connection,
+                new PublicKey(meteoraPoolAddress.pool_address),
+                txType,
+                amount,
+                kp,
+                slippageBps / 100,
+                50,
+                200_000,
+                commitment
+            )
+
+            if (!res) {
+                throw new Error('Error swapping tokens');
+            }
+            return [res, taken];
+        }
+        
 
         try {
             res = await swapTokensOnJupiter(
                 connection,
-                mintAddress,
-                NATIVE_MINT.toBase58(),
+                txType == "BUY" ? NATIVE_MINT.toBase58() : mintAddress,
+                txType == "BUY" ? mintAddress : NATIVE_MINT.toBase58(),
                 amount,
                 slippageBps,
-                "SELL",
+                txType,
                 decimals,
                 kp
             )
@@ -83,29 +114,6 @@ export async function swapTokens(
             }
         }
 
-        if (!res) {
-            let poolAddress = await getPoolByMintMeteora(mintAddress);
-            if (!poolAddress) {
-                throw new Error('No pool on meteora found');
-            }
-            let taken;
-            [res, taken] = await swapMeteoraTokens(
-                connection,
-                new PublicKey(poolAddress.pool_address),
-                "SELL",
-                amount,
-                kp,
-                slippageBps,
-                50,
-                200_000,
-                commitment
-            )
-
-            if (!res) {
-                throw new Error('Error swapping tokens');
-            }
-            return [res, taken];
-        }
         return [res, Date.now() - start];
     }
     const creator = Keypair.fromSecretKey(base58.decode(privKeyWallet));
@@ -411,9 +419,9 @@ async function swapMeteoraTokens(
     } else if (txType == "SELL") {
         inTokenMint = otherMint;
 
-        if (swapAmount === 0) {
-            let ata = await getAssociatedTokenAccount(inTokenMint.address.toBase58(), kp.publicKey.toBase58());
-            let balance = await getTokenAmountInWallet(connection, ata.toBase58());
+        var ata = await getAssociatedTokenAccount(inTokenMint.address.toBase58(), kp.publicKey.toBase58());
+        let balance = await getTokenAmountInWallet(connection, ata.toBase58());
+        if (swapAmount === 0 || (balance && swapAmount && balance < swapAmount)) {
             if (balance) {
                 swapAmount = balance;
             }
@@ -485,8 +493,21 @@ async function test() {
     let privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
     
-    let mint = 'EBTGkVzn779pknFXayJbechuswtRqqdu4gzN8WEqnebZ';
-    const connection = new Connection(process.env.MOONSHOT_RPC_ENDPOINT as string, "confirmed");
+    // let mint = 'A55XjvzRU4KtR3Lrys8PpLZQvPojPqvnv5bJVHMYy3Jv'; // raydium
+    let mint = '5BanFxgBEJEao49wNjwpc7wWrYomqvWR1DPa2Vz73nzG'; // meteora
+    // let rpcUrl = process.env.MOONSHOT_RPC_ENDPOINT as string;
+    // let rpcUrl = 'https://solana-mainnet.core.chainstack.com/22a2c4fd368d4b9352f28cfc834d4ed7';
+    let rpcUrl = 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, "confirmed");
+
+    await swapTokens(
+        connection,
+        "SELL",
+        mint,
+        privateKey,
+        100,
+    )
+
     // const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
     // let resp = await connection.getAccountInfo(new PublicKey(mint));
