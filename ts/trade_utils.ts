@@ -35,7 +35,8 @@ export async function swapTokens(
     slippageBps: number | null = null,
     microLamports: number | null = null,
     decimals: number | null = null,
-    commitment: web3.Commitment = 'recent',
+    // commitment: web3.Commitment = 'recent',
+    commitment: web3.Commitment = 'confirmed',
     // commitment: web3.Commitment = 'processed',
     // commitment: web3.Commitment = 'singleGossip',
 ): Promise<[string, number]> {
@@ -68,6 +69,7 @@ export async function swapTokens(
         for (let i = 0; i < 10; i++) {
             try {
                 meteoraPoolAddress = await getPoolByMintMeteora(mintAddress)
+                console.log('meteoraPoolAddress', meteoraPoolAddress);
                 break;
             } catch {
                 continue;
@@ -298,8 +300,6 @@ async function sellAll(connection: Connection, kp: Keypair) {
 type POOL_INFO = {
     mint: string,
     pool_address: string,
-    price_usd: number,
-    price_sol: number,
     decimals: number,
 }
 
@@ -329,20 +329,26 @@ async function getPoolByMintMeteora(mint: string): Promise<null | POOL_INFO> {
     let resp = await fetch(url, { headers });
     let response = await resp.json();
 
-    let tokenData = response.data?.[0];
-    if (!tokenData) {
-        return null;
+    for (let tokenData of response.data) {
+        // let tokenData = response.data?.[0];
+        if (!tokenData) {
+            continue;
+        }
+        
+        let amount = tokenData.pool_token_amounts[0] / tokenData.pool_token_amounts[1];
+
+        if (!amount) {
+            continue;
+        }
+
+        let p = {
+            mint: tokenData.pool_token_mints[1],
+            pool_address: tokenData.pool_address,
+            decimals: tokenData.lp_decimal,
+        }
+        return p;
     }
-    
-    let amount = tokenData.pool_token_amounts[0] / tokenData.pool_token_amounts[1];
-    let p = {
-        mint: tokenData.pool_token_mints[1],
-        pool_address: tokenData.pool_address,
-        price_usd: amount * await getSolPrice(),
-        price_sol: amount,
-        decimals: tokenData.lp_decimal,
-    }
-    return p;
+    return null;
 }
 
 
@@ -368,8 +374,6 @@ async function getPoolByMintRaydium(mint: string): Promise<null | POOL_INFO> {
     let mintInPool = tokenData.mintA.address === mint ? tokenData.mintA : tokenData.mintB;
     let p = {
         mint: mintInPool.address,
-        price_usd: amount * await getSolPrice(),
-        price_sol: amount,
         pool_address: tokenData.id,
         decimals: mintInPool.decimals,
     }
@@ -411,6 +415,7 @@ async function swapMeteoraTokens(
 
         let otherTokenPriceInSol = solAmount / otherAmount;
         let swapAmount_ = otherTokenPriceInSol * swapAmount * (10 ** solMint.decimals);
+        console.log('swapAmount meteora', swapAmount_);
         swapQuote = pool.getSwapQuote(
             solMint.address,
             new BN(swapAmount_),
@@ -478,7 +483,8 @@ async function swapMeteoraTokens(
                 blockhash: latestBlockHash.blockhash,
                 lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
                 signature: swapResult,
-            }
+            },
+            'confirmed'
         )
     } catch (error) {
         console.log('Error confirming transaction in [swapMeteoraTokens]: ', error);
@@ -493,21 +499,22 @@ async function test() {
     let privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
     
-    // let mint = 'A55XjvzRU4KtR3Lrys8PpLZQvPojPqvnv5bJVHMYy3Jv'; // raydium
+    // let mint = '696bjiNHJnVf5fubr5e2CbqY1iKG4en3vzhpXaYLK6Fa'; // raydium
     let mint = '5BanFxgBEJEao49wNjwpc7wWrYomqvWR1DPa2Vz73nzG'; // meteora
     // let rpcUrl = process.env.MOONSHOT_RPC_ENDPOINT as string;
-    // let rpcUrl = 'https://solana-mainnet.core.chainstack.com/22a2c4fd368d4b9352f28cfc834d4ed7';
     let rpcUrl = 'https://api.mainnet-beta.solana.com';
+
     const connection = new Connection(rpcUrl, "confirmed");
 
+    let start = Date.now();
     await swapTokens(
         connection,
         "SELL",
         mint,
-        privateKey,
-        100,
+        privateKey, 
+        200,
     )
-
+    console.log('Main time taken', Date.now() - start);
     // const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
     // let resp = await connection.getAccountInfo(new PublicKey(mint));
