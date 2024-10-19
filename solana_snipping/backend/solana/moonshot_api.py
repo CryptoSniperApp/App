@@ -385,7 +385,7 @@ class MoonshotAPI:
         subscription {
             Solana {
                 DEXTradeByTokens(
-                where: {Trade: {Dex: {ProgramAddress: {is: "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG"}}, Price: {ne: 0}, PriceInUSD: {ne: 0}, Currency: {MintAddress: {not: "11111111111111111111111111111111"}}}, Transaction: {Result: {Success: true}}}
+                where: {Trade: {Price: {ne: 0}, PriceInUSD: {ne: 0}, Currency: {MintAddress: {not: "So11111111111111111111111111111111111111112"}}}, Transaction: {Result: {Success: true}}}
                 ) {
                 Block {
                     Time
@@ -429,24 +429,29 @@ class MoonshotAPI:
             url=url, headers=headers, ping_interval=20, pong_timeout=60
         )
         await transport.connect()
+        
+        async def yield_data(data: dict):
+            
+            for trade in data["Solana"]["DEXTradeByTokens"]:
+                mint = trade["Trade"]["Currency"]["MintAddress"]
+                if mint in self._mints_price_watch:
+                    [
+                        await queue.put((trade, mint))
+                        for queue in self._mints_price_watch_queues
+                    ]
 
         try:
+            loop = asyncio.get_running_loop()
             while True:
                 try:
                     async for result in transport.subscribe(gql(query)):
                         if result.errors:
                             print(f"result errors: {result.errors}")
                             continue
-
+                        
                         data = result.data
-
-                        for trade in data["Solana"]["DEXTradeByTokens"]:
-                            mint = trade["Trade"]["Currency"]["MintAddress"]
-                            if mint in self._mints_price_watch:
-                                [
-                                    await queue.put((trade, mint))
-                                    for queue in self._mints_price_watch_queues
-                                ]
+                        f = asyncio.eager_task_factory(loop, yield_data(data))
+                        f.add_done_callback(asyncio_callbacks.raise_exception_if_set)
 
                 except (
                     websockets.exceptions.ConnectionClosedError,

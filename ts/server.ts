@@ -5,6 +5,9 @@ import * as grpc from '@grpc/grpc-js';
 import * as trade_utils from './trade_utils';
 import bs58 from "bs58";
 import * as dotenv from 'dotenv';
+import * as wallet_utils from './wallet_utils';
+import { web3 } from "@project-serum/anchor";
+import { ConnectionSolanaPool } from "./connection_pool";
 
 dotenv.config();
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
@@ -20,30 +23,6 @@ interface PoolInfo {
   baseMint?: string,
   quoteMint?: string,
   error?: string
-}
-
-
-interface Error {
-  success: boolean;
-  error: string
-}
-
-
-class ConnectionSolanaPool {
-  private connection: Connection | null;
-  private chainstackConnection: Connection | null;
-
-  constructor() {
-    this.connection = null;
-    this.chainstackConnection = null;
-  }  
-
-  getChainstackConnection() {
-    let c = new Connection(process.env.MOONSHOT_RPC_ENDPOINT as string, "recent");
-    this.chainstackConnection = c;
-    
-    return this.chainstackConnection;
-  }
 }
 
 
@@ -119,11 +98,12 @@ const tokensImpl: pools.TokensSolanaServer = {
     call: grpc.ServerUnaryCall<pools.RequestSwapTokens, pools.RequestSwapTokens>, 
     callback: grpc.sendUnaryData<pools.ResponseSwapTokens>
   ): Promise<void> {
-    let connection = connPool.getChainstackConnection();
+    let connection = connPool.getConnectionWithProxy();
     let resp;
     try {
       let req = call.request;
       let kp = Keypair.fromSecretKey(bs58.decode(req.privateKey));
+      req.amount = Math.round(req.amount);
 
       let slippage: number | null = null;
       let microlamports: number | null = null;
@@ -225,7 +205,7 @@ const tokensImpl: pools.TokensSolanaServer = {
     callback: grpc.sendUnaryData<pools.ResponseCreateTokenAccount>
   ): Promise<void> {
     let response;
-    let connection = connPool.getChainstackConnection();
+    let connection = connPool.getConnectionWithProxy();
     try {
       let ataPublicKey: PublicKey | null = null;
 
@@ -289,7 +269,7 @@ const tokensImpl: pools.TokensSolanaServer = {
     let resp;
     try {
       let req = call.request;
-      let connection = connPool.getChainstackConnection();
+      let connection = connPool.getConnectionWithProxy();
 
       let signer = Keypair.fromSecretKey(bs58.decode(req.walletPrivateKey));
       resp = await trade_utils.closeTokenAccount(
@@ -312,6 +292,76 @@ const tokensImpl: pools.TokensSolanaServer = {
     }
 
     callback(null, resp);
+  },
+  async transferSolToWallets(
+    call: grpc.ServerUnaryCall<pools.TransferSolToWallets, pools.TransferSolToWallets>, 
+    callback: grpc.sendUnaryData<pools.ResponseRpcOperation>
+  ): Promise<void> {
+    // let connection = connPool.getChainstackConnection();
+    let connection = connPool.getConnectionWithProxy();
+    let payerWallet = Keypair.fromSecretKey(bs58.decode(call.request.payerPrivateKey));
+    let response;
+    console.log(`amountsWallets: ${Object.values(call.request.walletsAmounts)}`);
+
+    let amounts: { [key: string]: number } = {};
+    for (let [key, value] of Object.entries(call.request.walletsAmounts)) {
+      amounts[key] = Math.round(value * web3.LAMPORTS_PER_SOL);
+    }
+
+    try {
+      let [txHash, taken] = await wallet_utils.transferSolToWallets(
+        connection,
+        payerWallet,
+        amounts
+      )
+      response = pools.ResponseRpcOperation.create({
+        success: true,
+        rawData: `${txHash}`,
+        msTimeTaken: taken.toString()
+      })
+    } catch (error: any) {
+      response = pools.ResponseRpcOperation.create({
+        success: false,
+        rawData: `error: ${error}. traceback: ${error.stack}`,
+        msTimeTaken: ""
+      });
+    }
+
+    callback(null, response);
+  },
+  async receiveSolFromWallets(
+    call: grpc.ServerUnaryCall<pools.ReceiveSolFromWallets, pools.ReceiveSolFromWallets>, 
+    callback: grpc.sendUnaryData<pools.ResponseRpcOperation>
+  ): Promise<void> {
+    let destination = call.request.destinationWalletPublicKey;
+    let response;
+
+    let promises = [];
+    try {
+      for (let [wallet, amount] of Object.entries(call.request.walletsDatas)) {
+        let connection = connPool.getConnectionWithProxy();
+        let kp = Keypair.fromSecretKey(bs58.decode(wallet));
+        // console.log(`transfer sol from wallet ${kp.publicKey.toBase58()} to wallet: ${destination}. amount: ${amount}`);
+        promises.push(wallet_utils.transferSol(connection, kp, amount, destination));
+      }
+
+      let start = new Date();
+      let res = await Promise.all(promises);
+      let end = new Date();
+      response = pools.ResponseRpcOperation.create({
+        success: true,
+        rawData: JSON.stringify(res),
+        msTimeTaken: `${end.getTime() - start.getTime()}`
+      });
+    } catch (error: any) {
+      response = pools.ResponseRpcOperation.create({
+        success: false,
+        rawData: `error: ${error}. traceback: ${error.stack}`,
+        msTimeTaken: ""
+      });
+    }
+
+    callback(null, response);
   }
 }
 

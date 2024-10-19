@@ -98,6 +98,25 @@ message ResponseGetAssociatedTokenAccount {
 }
 
 
+message TransferSolToWallets {
+    string payer_private_key = 1;
+    map<string, float> wallets_amounts = 2;
+}
+
+message ResponseRpcOperation {
+    string error = 1;
+    bool success = 2;
+    string ms_time_taken = 3;
+    string raw_data = 4;
+}
+
+
+message ReceiveSolFromWallets {
+    // {wallet_private_key: amount}
+    map<string, float> wallets_datas = 1;
+    string destination_wallet_public_key = 2;
+}
+
 service PoolState {
     rpc getPoolState(RequestPoolState) returns (ResponsePoolStateOperation);
 }
@@ -107,5 +126,7 @@ service TokensSolana {
     rpc createTokenAccount(CreateTokenAccount) returns (ResponseCreateTokenAccount);
     rpc closeTokenAccount(CloseTokenAccount) returns (ResponseCloseTokenAccount);
     rpc getAssociatedTokenAccount(GetAssociatedTokenAccount) returns (ResponseGetAssociatedTokenAccount);
+    rpc transferSolToWallets(TransferSolToWallets) returns (ResponseRpcOperation);
+    rpc receiveSolFromWallets(ReceiveSolFromWallets) returns (ResponseRpcOperation);
 }
 

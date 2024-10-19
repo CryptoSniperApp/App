@@ -2,6 +2,7 @@
 # sources: pools.proto
 # plugin: python-betterproto
 from dataclasses import dataclass
+from typing import Dict, Optional
 
 import betterproto
 import grpclib
@@ -107,6 +108,31 @@ class ResponseGetAssociatedTokenAccount(betterproto.Message):
     ms_time_taken: str = betterproto.string_field(4)
 
 
+@dataclass
+class TransferSolToWallets(betterproto.Message):
+    payer_private_key: str = betterproto.string_field(1)
+    wallets_amounts: Dict[str, float] = betterproto.map_field(
+        2, betterproto.TYPE_STRING, betterproto.TYPE_FLOAT
+    )
+
+
+@dataclass
+class ResponseRpcOperation(betterproto.Message):
+    error: str = betterproto.string_field(1)
+    success: bool = betterproto.bool_field(2)
+    ms_time_taken: str = betterproto.string_field(3)
+    raw_data: str = betterproto.string_field(4)
+
+
+@dataclass
+class ReceiveSolFromWallets(betterproto.Message):
+    # {wallet_private_key: amount}
+    wallets_datas: Dict[str, float] = betterproto.map_field(
+        1, betterproto.TYPE_STRING, betterproto.TYPE_FLOAT
+    )
+    destination_wallet_public_key: str = betterproto.string_field(2)
+
+
 class PoolStateStub(betterproto.ServiceStub):
     async def get_pool_state(
         self, *, pool_data: bytes = b""
@@ -192,4 +218,36 @@ class TokensSolanaStub(betterproto.ServiceStub):
             "/TokensSolana/getAssociatedTokenAccount",
             request,
             ResponseGetAssociatedTokenAccount,
+        )
+
+    async def transfer_sol_to_wallets(
+        self,
+        *,
+        payer_private_key: str = "",
+        wallets_amounts: Optional[Dict[str, float]] = None,
+    ) -> ResponseRpcOperation:
+        request = TransferSolToWallets()
+        request.payer_private_key = payer_private_key
+        request.wallets_amounts = wallets_amounts
+
+        return await self._unary_unary(
+            "/TokensSolana/transferSolToWallets",
+            request,
+            ResponseRpcOperation,
+        )
+
+    async def receive_sol_from_wallets(
+        self,
+        *,
+        wallets_datas: Optional[Dict[str, float]] = None,
+        destination_wallet_public_key: str = "",
+    ) -> ResponseRpcOperation:
+        request = ReceiveSolFromWallets()
+        request.wallets_datas = wallets_datas
+        request.destination_wallet_public_key = destination_wallet_public_key
+
+        return await self._unary_unary(
+            "/TokensSolana/receiveSolFromWallets",
+            request,
+            ResponseRpcOperation,
         )
