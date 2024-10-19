@@ -567,7 +567,7 @@ class Moonshot:
                         if not buy_amount_usd:
                             buy_amount_usd = float(price_usd) * buy_amount
                         
-                        price_usd = first_swap_price * 6.5 if not sell_body else price_usd * 16.5
+                        # price_usd = first_swap_price * 6.5 if not sell_body else price_usd * 16.5  # for tests
                         percentage_diff = (
                             (price_usd - first_swap_price) / first_swap_price * 100
                         )

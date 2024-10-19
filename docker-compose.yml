@@ -28,6 +28,9 @@ services:
     env_file:
       - .env
 
+    volumes:
+      - ./ts/trade_utils.ts:/app/trade_utils.ts
+
     healthcheck:
       test: nc -z -w 1 127.0.0.1 50051
       interval: 30s

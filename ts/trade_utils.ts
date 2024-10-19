@@ -10,7 +10,6 @@ import { NATIVE_MINT } from '@solana/spl-token'
 import { swapTokensOnJupiter } from "./jupiter_dex";
 import { ResponseError } from "@jup-ag/api";
 import { ConnectionSolanaPool } from "./connection_pool";
-import { Program } from "@coral-xyz/anchor";
 import { withTimeout } from "./main";
 
 
@@ -34,7 +33,6 @@ class MyAnchorProviderV1 extends BaseAnchorProvider<any> {
     setConnection(connection: Connection) {
         (this as any)._connection = connection;
         (this as any).setProvider();
-        (this as any)._program = new Program(this.IDL, this.PROGRAM_ID);        
     }
 }
 
@@ -572,18 +570,18 @@ async function test() {
 
     // const connection = new Connection(rpcUrl, "confirmed");
 
-    let promises = [];
+    // let promises = [];
     let start = Date.now();
-    for (let i = 0; i < 10; i++) {
-        promises.push(swapTokens(
-            connection,
-            "BUY",
-            mint,
-            privateKey, 
-            100,
-        ));
-    }
-    await Promise.all(promises);
+    // for (let i = 0; i < 10; i++) {
+    //     promises.push(swapTokens(
+    //         connection,
+    //         "BUY",
+    //         mint,
+    //         privateKey, 
+    //         100,
+    //     ));
+    // }
+    // await Promise.all(promises);
     console.log('Main time taken', Date.now() - start);
 
     // await sellAll(connection, kp);
