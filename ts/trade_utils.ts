@@ -69,11 +69,13 @@ export async function swapTokens(
         rpcUrl,
         environment: Environment.MAINNET,
     });
-    let provider = new MyAnchorProviderV1(rpcUrl, {
-        commitment: 'confirmed',
-    });
-    provider.setConnection(connection);
-    moonshot.provider = provider;
+    (moonshot.provider as any)._connection = connection;
+    (moonshot.provider as any).setProvider();
+    // let provider = new MyAnchorProviderV1(rpcUrl, {
+    //     commitment: 'confirmed',
+    // });
+    // provider.setConnection(connection);
+    // moonshot.provider = provider;
 
     const token = moonshot.Token({ mintAddress: mintAddress });
     let curvePos;
@@ -553,7 +555,7 @@ async function test() {
     let connection = new ConnectionSolanaPool().getConnectionWithProxy();
 
     // let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
-    let mint = '3eMtc3qcr7BEjyzdvY5sGNaibXKanZpm24EowXcex1yp';
+    let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
     // let result = await swapTokens(connection, "BUY", mint, privateKey, 100);
     // console.log(result);
     
@@ -570,17 +572,21 @@ async function test() {
 
     // const connection = new Connection(rpcUrl, "confirmed");
 
-    // // let start = Date.now();
-    // // await swapTokens(
-    // //     connection,
-    // //     "SELL",
-    // //     mint,
-    // //     privateKey, 
-    // //     200,
-    // // )
-    // // console.log('Main time taken', Date.now() - start);
+    let promises = [];
+    let start = Date.now();
+    for (let i = 0; i < 10; i++) {
+        promises.push(swapTokens(
+            connection,
+            "BUY",
+            mint,
+            privateKey, 
+            100,
+        ));
+    }
+    await Promise.all(promises);
+    console.log('Main time taken', Date.now() - start);
 
-    await sellAll(connection, kp);
+    // await sellAll(connection, kp);
 }
 
 
@@ -588,4 +594,4 @@ export const privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
 export const kp = Keypair.fromSecretKey(base58.decode(privateKey));
 
 
-test();
+// test();
