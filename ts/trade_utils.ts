@@ -288,15 +288,16 @@ async function sellAll(connection: Connection, kp: Keypair) {
         console.log(
           `owner: ${accountInfo.account.data["parsed"]["info"]["owner"]}`,
         );
+        let decimals = accountInfo.account.data["parsed"]["info"]["tokenAmount"]["decimals"];
         console.log(
-          `decimals: ${accountInfo.account.data["parsed"]["info"]["tokenAmount"]["decimals"]}`,
+          `decimals: ${decimals}`,
         );
         console.log(
           `amount: ${amount}`,
         );
         console.log("====================");
 
-        if (amount != null && amount !== 0 && amount < 50 ) {
+        if (amount != null && `${amount}` !== "0" && amount < 500_000 * (10 ** decimals) ) {
             try {
                 await swapTokens(
                     connection,
