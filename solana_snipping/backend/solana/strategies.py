@@ -580,7 +580,7 @@ class Moonshot:
             f"Адрес токена - *{mint}*\n\n"
             f"Поймали транзакцию в _{transaction_received}_, купили монету в _{capture_time}_.\n\n"
             f"Купили {buy_amount} единиц токена\n"
-            f"SOL: {buy_amount_sol}"
+            f"Сумма в SOL: {buy_amount_sol}\n"
             f"Время самой транзакции - {ms_time_taken} ms\n"
             f"[DEBUG] Время выполнения функции вместе с транзакцией - {end_function_time - start_function_time} s\n"
             f"Результат - {buy_tx_signature}"
@@ -656,7 +656,7 @@ class Moonshot:
             repo = AnalyticRepository(session)
             sell_all_failed = 0  # счетчик ошибок при продаже всех токенов
             amount_to_sell_first_part_tokens = None  # сумма токенов при выводе тела
-            max_price_sol = buy_amount_sol
+            max_price_sol = None
             
             data = AnalyticData(
                 time=time.time(),
@@ -686,24 +686,32 @@ class Moonshot:
                             first_swap_price = float(price_usd)
                         if not buy_amount_usd:
                             buy_amount_usd = float(price_usd) * buy_amount
+                            
+                        if max_price_sol is None:
+                            max_price_sol = price_sol
                         if price_sol > max_price_sol:
                             max_price_sol = price_sol
                             
+                        # price_usd = first_swap_price * 6.5 if not sell_body else price_usd * 16.5  # for tests
+                        percentage_diff = (
+                            (price_usd - first_swap_price) / first_swap_price * 100
+                        )
+                            
                         # если текущая цена ниже максимальной цены                            
-                        if price_sol < max_price_sol:
+                        if price_updated_at - capture_time.timestamp() < 40 and price_sol < max_price_sol:
                             # вычисляем разницу в процентах относительно максимальной цены и текущей цены
                             diff = (price_sol - max_price_sol) / max_price_sol * 100
                             # если цена упала более чем на 50%
                             if (diff * -1) > max_diff_percents_of_drop_price:
-                                init_msg = f"[ЦЕНА УПАЛА НА {round(diff, 2)} ПРОЦЕНТОВ]"
+                                init_msg = f"[ЦЕНА УПАЛА НА {round((diff * -1), 2)} ПРОЦЕНТОВ]"
                                 msg = (
                                     f"{init_msg}\n"
                                     "Сработал 2 триггер на продажу всех "
                                     "токенов. С момента покупки прошло "
-                                    f"{time.time() - capture_time.timestamp()}.\n"
+                                    f"{round(time.time() - capture_time.timestamp(), 2)} секунд.\n"
                                     f"Максимальная цена SOL - {max_price_sol}\n"
                                     f"Текущая цена SOL - {price_sol}\n"
-                                    f"{sell_all_failed} Попытка продать все токены (максимум 5)"
+                                    f"Попытка №{sell_all_failed} продать все токены (максимум 5)"
                                 )
                                 logger.info(msg)
                                 result = await self._sell_all_tokens(
@@ -746,11 +754,6 @@ class Moonshot:
                                 data.comment = init_msg
                                 logger.success(succ_msg)
                                 return
-                        
-                        # price_usd = first_swap_price * 6.5 if not sell_body else price_usd * 16.5  # for tests
-                        percentage_diff = (
-                            (price_usd - first_swap_price) / first_swap_price * 100
-                        )
                         
                         data = AnalyticData(
                             time=time.time(),
