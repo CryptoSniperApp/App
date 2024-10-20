@@ -457,6 +457,56 @@ class Moonshot:
         except Exception as e:
             logger.exception(e)
             return
+        
+    async def _sell_all_tokens(
+        self, 
+        init_msg: str, 
+        mint: str, 
+        amount: int = 0, 
+        decimals: int = None, 
+        slippage: int = 1000, 
+        microlamports: int = 100_000,
+        max_attempts: int = 15
+    ):
+        failed = 0
+        data = {"success": False, "error": ""}
+        while True:
+            tx_signature, ms_time_taken, success = await self._swap_tokens(
+                swap_type="SELL",
+                mint=mint,
+                private_wallet_key=self._private_wallet_key,
+                slippage=slippage,
+                decimal=decimals or None,
+                amount=amount,
+                microlamports=microlamports,
+            )
+            data["tx_signature"] = tx_signature
+            data["ms_time_taken"] = ms_time_taken
+            
+            if failed > max_attempts:
+                logger.info(f"{init_msg} Не удалось продать все токены из за неудачной транзакции ({mint})")
+                return data
+            
+            if not success:
+                await asyncio.sleep(5)
+                failed += 1
+            elif tx_signature:
+                break
+        
+            await asyncio.sleep(10)
+        
+        is_success, error = await self.is_transaction_success(tx_signature)
+        if not is_success:
+            if isinstance(error, str) and error.count("to be already initialized"):
+                data["error"] = error
+                return data
+            elif error:
+                logger.error(f"{init_msg} Получили ошибку после попытки продать все токены. {error}")    
+                data["error"] = str(error)
+                return data
+        
+        data["success"] = True
+        return data
 
     async def _process_data(
         self,
@@ -475,7 +525,7 @@ class Moonshot:
         buy_amount_usd = None # какой эквивалент в токенах покупаем
         buy_amount_sol = None  # сколько токенов мы купили в sol
         
-        buy_amount = 50_000 # сколько токенов покупаем
+        buy_amount = 150_000 # сколько токенов покупаем
         start_function_time = time.time()
         
         failed = 0
@@ -541,8 +591,9 @@ class Moonshot:
             logger.exception(e)
         logger.info(message)
 
-        seconds_watch = 60 * 60 * 10  # 10 hours
+        seconds_watch = 60 * 60 * 15  # 10 hours
         interval_seconds_for_check_price = 60 * 5  # 5 minutes
+        max_diff_percents_of_drop_price = 50
 
         min_percents = 200  # если цена опустилась на этот процент, то выходим из функции
         percents_diff_for_sell_body = 530  # если цена выросла на этот процент, то начинаем продавать тело
@@ -564,46 +615,29 @@ class Moonshot:
             
             init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ {max_time} СЕКУНДЫ]"
             logger.info(f"{init_msg}. С момента первой покупки прошло {int(time.time() - start_function_time)} секунд ({mint}). Продаем все")
-            failed = 0
-            amount = buy_amount if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 20)
-            while True:
-                tx_signature, ms_time_taken, success = await self._swap_tokens(
-                    swap_type="SELL",
-                    mint=mint,
-                    private_wallet_key=self._private_wallet_key,
-                    slippage=1000,
-                    decimal=decimals or None,
-                    amount=amount,
-                    microlamports=100_000,
-                )
-                if failed > 15:
-                    logger.info(f"{init_msg} Не удалось продать все токены из за неудачной транзакции ({mint})")
-                    return
-                
-                if not success:
-                    await asyncio.sleep(5)
-                    failed += 1
-                elif tx_signature:
-                    break
             
-                await asyncio.sleep(10)
+            result = await self._sell_all_tokens(
+                init_msg=init_msg,
+                mint=mint,
+                amount=0
+            )
+            success, error = result["success"], result["error"]
             
-            is_success, error = await self.is_transaction_success(tx_signature)
-            if not is_success:
+            if not success:
                 if error.count("to be already initialized"):
                     exit_from_monitor = True
                     scheduler.remove_job(job.id)
-                    return
                 else:
-                    logger.error(f"{init_msg} Получили ошибку после попытки продать все токены. {error}")    
+                    logger.warning(f"{init_msg} Получили ошибку после попытки продать все токены. {error}")    
+                return
             
-            logger.success(
-                f"{init_msg} Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
-                f"время выполнения - {ms_time_taken} ms, "
-                f"сигнатура - {tx_signature}"
-            )
             exit_from_monitor = True
             scheduler.remove_job(job.id)
+            logger.success(
+                f"{init_msg} Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
+                f"время выполнения - {result["ms_time_taken"]} ms, "
+                f"сигнатура - {result["tx_signature"]}"
+            )
             
         scheduler = AsyncIOScheduler()
         
@@ -622,6 +656,7 @@ class Moonshot:
             repo = AnalyticRepository(session)
             sell_all_failed = 0  # счетчик ошибок при продаже всех токенов
             amount_to_sell_first_part_tokens = None  # сумма токенов при выводе тела
+            max_price_sol = buy_amount_sol
             
             data = AnalyticData(
                 time=time.time(),
@@ -651,6 +686,66 @@ class Moonshot:
                             first_swap_price = float(price_usd)
                         if not buy_amount_usd:
                             buy_amount_usd = float(price_usd) * buy_amount
+                        if price_sol > max_price_sol:
+                            max_price_sol = price_sol
+                            
+                        # если текущая цена ниже максимальной цены                            
+                        if price_sol < max_price_sol:
+                            # вычисляем разницу в процентах относительно максимальной цены и текущей цены
+                            diff = (price_sol - max_price_sol) / max_price_sol * 100
+                            # если цена упала более чем на 50%
+                            if (diff * -1) > max_diff_percents_of_drop_price:
+                                init_msg = f"[ЦЕНА УПАЛА НА {round(diff, 2)} ПРОЦЕНТОВ]"
+                                msg = (
+                                    f"{init_msg}\n"
+                                    "Сработал 2 триггер на продажу всех "
+                                    "токенов. С момента покупки прошло "
+                                    f"{time.time() - capture_time.timestamp()}.\n"
+                                    f"Максимальная цена SOL - {max_price_sol}\n"
+                                    f"Текущая цена SOL - {price_sol}\n"
+                                    f"{sell_all_failed} Попытка продать все токены (максимум 5)"
+                                )
+                                logger.info(msg)
+                                result = await self._sell_all_tokens(
+                                    init_msg=init_msg,
+                                    mint=mint,
+                                    amount=0
+                                )
+                                success, error = result["success"], result["error"]
+                                if not success:
+                                    if error.count("to be already initialized"):
+                                        exit_from_monitor = True
+                                        logger.warning(f"{init_msg}. Ошибка продажи токенов с несуществующего токен аккаунта. raw error: {error}")
+                                        return
+                                    if sell_all_failed >= 5:
+                                        return
+                                    sell_all_failed += 1
+                                    logger.warning(f"{init_msg}. не удалось продать все токены по 2 триггеру. ошибка {error}. сигнатура -  {result["tx_signature"]}")
+                                    continue
+                                succ_msg = (
+                                    f"{init_msg}. Успешно продали все токены по 2 триггеру.\n"
+                                    f"Макс цена в sol - {max_price_sol}\n"
+                                    f"Текущая цена в sol - {price_sol}\n"
+                                    f"Попытка продать все токены - {sell_all_failed}"
+                                )
+                                
+                                try:
+                                    swap_price = await self.extract_sol_amount_from_buy_transaction(sig=result["tx_signature"])
+                                    if swap_price:
+                                        data = AnalyticData(
+                                            time=time.time(),
+                                            mint1_addr=mint,
+                                            capture_time=capture_time.timestamp(),
+                                            swap_price=swap_price,
+                                            swap_time=swap_time.timestamp(),
+                                            percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100
+                                        )
+                                except Exception as e:
+                                    logger.exception(e)
+                                
+                                data.comment = init_msg
+                                logger.success(succ_msg)
+                                return
                         
                         # price_usd = first_swap_price * 6.5 if not sell_body else price_usd * 16.5  # for tests
                         percentage_diff = (

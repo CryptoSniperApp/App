@@ -69,11 +69,11 @@ export async function swapTokens(
     });
     (moonshot.provider as any)._connection = connection;
     (moonshot.provider as any).setProvider();
-    // let provider = new MyAnchorProviderV1(rpcUrl, {
-    //     commitment: 'confirmed',
-    // });
-    // provider.setConnection(connection);
-    // moonshot.provider = provider;
+    
+    if (txType === "SELL" && amount === 0) {
+        let ata = await getAssociatedTokenAccount(mintAddress, kp.publicKey.toBase58());
+        amount = await getTokenAmountInWallet(connection, ata.toBase58()) as number;
+    }
 
     const token = moonshot.Token({ mintAddress: mintAddress });
     let curvePos;
@@ -120,10 +120,6 @@ export async function swapTokens(
         
 
         try {
-            if (amount === 0) {
-                let ata = await getAssociatedTokenAccount(mintAddress, kp.publicKey.toBase58());
-                amount = await getTokenAmountInWallet(connection, ata.toBase58()) as number;
-            }
             console.log('swapTokensOnJupiter');
             res = await swapTokensOnJupiter(
                 connection,
@@ -548,17 +544,27 @@ async function swapMeteoraTokens(
 
 
 async function test() {
-    let privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
+    var privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
     let chainStackRpcEndpoint = process.env.MOONSHOT_RPC_ENDPOINT as string;
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
-    // let connection = new ConnectionSolanaPool().getConnectionWithProxy();
+    console.log(kp.publicKey.toBase58());
+    let connection = new ConnectionSolanaPool().getConnectionWithProxy();
     // let connection = new Connection(rpcUrl, "confirmed");
     // let latestBlockhash = await connection.getLatestBlockhash();
     // console.log(latestBlockhash);
-    return
+    // return
 
     // let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
-    let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
+    var mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
+    mint = '3SqaeJ6bhEQNRod5wJyDYyq6N28Wwz2jcEM5J8H9Rp9q';
+    mint = '41upazdWAgLjfCkLGQwGDgj2knovnpPyr4q2ZVNjifLz'
+    mint = 'GLeMhfYHSHW12o4UC8b8tb7YriMp6tybpEFBUxjf7okf';
+
+    
+    // let ata = await getAssociatedTokenAccount(mint, kp.publicKey.toBase58());
+    // let amount = await getTokenAmountInWallet(connection, ata.toBase58()) as number;
+    // console.log(amount);
+    
     // let result = await swapTokens(connection, "BUY", mint, privateKey, 100);
     // console.log(result);
     
@@ -576,18 +582,18 @@ async function test() {
     // const connection = new Connection(rpcUrl, "confirmed");
 
     // let promises = [];
-    let start = Date.now();
+    // let start = Date.now();
     // for (let i = 0; i < 10; i++) {
     //     promises.push(swapTokens(
     //         connection,
     //         "BUY",
     //         mint,
     //         privateKey, 
-    //         100,
+    //         5,
     //     ));
     // }
     // await Promise.all(promises);
-    console.log('Main time taken', Date.now() - start);
+    // console.log('Main time taken', Date.now() - start);
 
     // await sellAll(connection, kp);
 }
