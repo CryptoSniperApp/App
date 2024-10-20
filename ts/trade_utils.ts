@@ -550,7 +550,11 @@ async function test() {
     let privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
     let chainStackRpcEndpoint = process.env.MOONSHOT_RPC_ENDPOINT as string;
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
-    let connection = new ConnectionSolanaPool().getConnectionWithProxy();
+    // let connection = new ConnectionSolanaPool().getConnectionWithProxy();
+    // let connection = new Connection(rpcUrl, "confirmed");
+    // let latestBlockhash = await connection.getLatestBlockhash();
+    // console.log(latestBlockhash);
+    return
 
     // let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
     let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';

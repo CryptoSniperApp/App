@@ -6,8 +6,8 @@ import pandas as pd
 
 
 class ReadableAnalytic:
-    def __init__(self) -> None:
-        conn = sqlite3.connect("database.db")
+    def __init__(self, fn: str = "database.db") -> None:
+        conn = sqlite3.connect(fn)
         df = pd.read_sql_query("select * from analytic;", conn)
         data = df.to_dict("records")
 
@@ -81,9 +81,9 @@ class ReadableAnalytic:
 
 
 async def main():
-    analytic = ReadableAnalytic()
+    analytic = ReadableAnalytic(fn="statistic.db")
     df = analytic.construct_data()
-    df.to_csv("data.csv", index=False)
+    df.to_csv("data-statistic.csv", index=False)
     ...
 
 

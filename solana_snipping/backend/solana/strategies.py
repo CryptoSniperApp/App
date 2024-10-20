@@ -406,7 +406,33 @@ class Moonshot:
         
         return True, error
     
-    
+    async def is_mint_in_wallet(self, mint: str, needed_balance: int = None):
+        client = AsyncClient("https://api.mainnet-beta.solana.com")
+        try:
+            keypair = Keypair.from_base58_string(self._private_wallet_key)
+            ata = await self._grpc_conn.get_associated_token_account(
+                mint_address=mint, 
+                wallet_public_key=keypair.pubkey().__str__()
+            )
+            
+            if not ata.ata_public_key:
+                return False
+            
+            balance = await client.get_token_account_balance(
+                Pubkey.from_string(ata.ata_public_key),
+                "confirmed"
+            )
+            if not balance.value.ui_amount:
+                return False
+            
+            if needed_balance:
+                if int(balance.value.ui_amount) == needed_balance:
+                    return True
+            return True
+        
+        except Exception as e:
+            logger.exception(e)
+            return False
 
     async def _process_data(
         self,
@@ -438,16 +464,36 @@ class Moonshot:
                 decimal=decimals or None,
                 microlamports=200_000
             )
+            
+            if failed > 3:
+                logger.warning(
+                    f"Пробовали купить {buy_amount} токенов "
+                    f"{mint} несколько раз. Не получилось. Выходим из функции"
+                )
+                return
+            
             if success and buy_tx_signature:
                 is_buy_success, error = await self.is_transaction_success(signature=buy_tx_signature, retries=3)
                 if not is_buy_success or error:
-                    return
+                    # await asyncio.sleep(10)
+                    
+                    in_wallet = False
+                    for _ in range(3):
+                        in_wallet = await self.is_mint_in_wallet(
+                            mint=mint,
+                            needed_balance=buy_amount
+                        )
+                        if not in_wallet:
+                            await asyncio.sleep(3)
+                        else:
+                            break
+                    
+                    if not in_wallet:
+                        failed += 1
+                        continue
                 
                 break
             else:
-                if failed > 3:
-                    logger.warning(f"Не удалось купить токен - {mint}. Выходим из функции")
-                    return
                 failed += 1
                 await asyncio.sleep(1)
         
@@ -723,9 +769,15 @@ async def main():
     mint = "BdgT2QewMPZ291P2H4iZTPsZWhZbYRocUMqW1N6uvFVY"
     print("start ", mint)
     
-    m.subscribe_to_moonshot_mints_create(queue=q)
-    m._moonshot_client._mints_price_watch.append(mint)
-    m.handle_transaction(mint=mint, transaction_received=datetime.now(), signature="")
+    # m._setup_grpc_stub()
+    # print(
+    #     await m.is_mint_in_wallet(
+    #         "9PUEb56bXipsmD1ezRPfKeyLXc5VyKXFRsvtUZtnPxPD", 50000
+    #     )
+    # )
+    # m.subscribe_to_moonshot_mints_create(queue=q)
+    # m._moonshot_client._mints_price_watch.append(mint)
+    # m.handle_transaction(mint=mint, transaction_received=datetime.now(), signature="")
     
     await asyncio.sleep(10000)
     
