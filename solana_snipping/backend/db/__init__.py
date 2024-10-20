@@ -20,6 +20,7 @@ class AnalyticData(Base):
     swap_time: Mapped[float] = mapped_column(Float, nullable=True)
     swap_price: Mapped[float] = mapped_column(Float, nullable=True)
     percentage_difference: Mapped[float] = mapped_column(Float, nullable=True)
+    comment: Mapped[str] = mapped_column(String, nullable=True)
 
 
 def create_async_sessiomaker():

@@ -433,6 +433,30 @@ class Moonshot:
         except Exception as e:
             logger.exception(e)
             return False
+        
+    async def extract_sol_amount_from_buy_transaction(self, sig: str) -> int | None:
+        try:
+            signature = Signature.from_string(sig)
+            client = AsyncClient('https://api.mainnet-beta.solana.com', "confirmed")
+            resp = await client.get_transaction(
+                signature, encoding="jsonParsed"
+            )
+            if not resp.value:
+                raise ValueError(f"transaction not found: {sig}")
+            
+            meta = resp.value.transaction.meta
+            if meta.err:
+                raise ValueError(f"transaction has error: {meta.err}")
+            transaction = resp.value.transaction.transaction
+            
+            account = transaction.message.instructions[1].accounts[2]
+            i = next((i for i, x in enumerate(transaction.message.account_keys) if x.pubkey == account), None)
+            if not i:
+                return
+            return (meta.post_balances[i] - meta.pre_balances[i]) / 1_000_000_000
+        except Exception as e:
+            logger.exception(e)
+            return
 
     async def _process_data(
         self,
@@ -449,6 +473,7 @@ class Moonshot:
         decimals = 9  # количество знаков после запятой     
         first_swap_price = None  # цена первой покупки
         buy_amount_usd = None # какой эквивалент в токенах покупаем
+        buy_amount_sol = None  # сколько токенов мы купили в sol
         
         buy_amount = 50_000 # сколько токенов покупаем
         start_function_time = time.time()
@@ -497,6 +522,7 @@ class Moonshot:
                 failed += 1
                 await asyncio.sleep(1)
         
+        buy_amount_sol = await self.extract_sol_amount_from_buy_transaction(buy_tx_signature)
         end_function_time = time.time() 
         capture_time = datetime.now()
         message = (
@@ -504,6 +530,7 @@ class Moonshot:
             f"Адрес токена - *{mint}*\n\n"
             f"Поймали транзакцию в _{transaction_received}_, купили монету в _{capture_time}_.\n\n"
             f"Купили {buy_amount} единиц токена\n"
+            f"SOL: {buy_amount_sol}"
             f"Время самой транзакции - {ms_time_taken} ms\n"
             f"[DEBUG] Время выполнения функции вместе с транзакцией - {end_function_time - start_function_time} s\n"
             f"Результат - {buy_tx_signature}"
@@ -531,11 +558,11 @@ class Moonshot:
         async def sell_all_tokens():
             nonlocal exit_from_monitor
             
-            max_time = 60 * 60  # 1 hour
+            max_time = 60 * 90  # 1.5 hour
             if time.time() - price_updated_at < max_time:
                 return
             
-            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЙ ЧАС]"
+            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ {max_time} СЕКУНДЫ]"
             logger.info(f"{init_msg}. С момента первой покупки прошло {int(time.time() - start_function_time)} секунд ({mint}). Продаем все")
             failed = 0
             amount = buy_amount if not sell_body else int((buy_amount - amount_to_sell_first_part_tokens) - 20)
@@ -594,6 +621,17 @@ class Moonshot:
             await session.__aenter__()      
             repo = AnalyticRepository(session)
             sell_all_failed = 0  # счетчик ошибок при продаже всех токенов
+            amount_to_sell_first_part_tokens = None  # сумма токенов при выводе тела
+            
+            data = AnalyticData(
+                time=time.time(),
+                mint1_addr=mint,
+                capture_time=capture_time.timestamp(),
+                swap_price=buy_amount_sol,
+                swap_time=capture_time.timestamp(),
+                percentage_difference=0,
+            )            
+            await repo.add_analytic(data)
 
             exit_from_monitor = False
             async with asyncio.timeout(seconds_watch):
@@ -607,6 +645,7 @@ class Moonshot:
                             continue
                         
                         price_usd = data["Trade"]["PriceInUSD"]
+                        price_sol = data["Trade"]["Price"]
                         price_updated_at = time.time()
                         if not first_swap_price:
                             first_swap_price = float(price_usd)
@@ -622,7 +661,7 @@ class Moonshot:
                             time=time.time(),
                             mint1_addr=mint,
                             capture_time=capture_time.timestamp(),
-                            swap_price=price_usd,
+                            swap_price=price_sol,
                             swap_time=datetime.now().timestamp(),
                             percentage_difference=percentage_diff,
                         )
@@ -630,13 +669,14 @@ class Moonshot:
                         await repo.add_analytic(data)
 
                         logger.debug(
-                            f"Swap price: {first_swap_price}, first swap price: {price_usd}. Percentage diff: {percentage_diff}. mint - {mint}"
+                            f"Swap price USD: {price_usd}, first swap price USD: {first_swap_price}. Percentage diff: {percentage_diff}. mint - {mint}"
                         )
 
                         if sell_body and percentage_diff >= percents_diff_for_sell:
                             # продаем оставшиеся токены
                             init_msg = "[ВЫВОДИМ ОСТАТОК]"
                             while True:
+                                swap_time = datetime.now()
                                 tx_signature, ms_time_taken, success = await self._swap_tokens(
                                     swap_type="SELL",
                                     mint=mint,
@@ -679,6 +719,23 @@ class Moonshot:
                                     continue
                                 
                                 logger.success(f"{init_msg} Мы успешно вывели все оставшиеся токены {mint}.")
+                                
+                                try:
+                                    swap_price = await self.extract_sol_amount_from_buy_transaction(sig=tx_signature)
+                                    if swap_price:
+                                        data = AnalyticData(
+                                            time=time.time(),
+                                            mint1_addr=mint,
+                                            capture_time=capture_time.timestamp(),
+                                            swap_price=swap_price,
+                                            swap_time=swap_time.timestamp(),
+                                            percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100
+                                        )
+                                except Exception as e:
+                                    logger.exception(e)
+                                
+                                data.comment = init_msg
+                                await repo.add_analytic(data)
                                 return
                             
                         elif not sell_body and percentage_diff >= percents_diff_for_sell_body:
@@ -687,7 +744,8 @@ class Moonshot:
                             failed = 0
                             while True:
                                 # продаем вложенные доллары
-                                amount_to_sell_first_part_tokens = buy_amount_usd / price_usd
+                                # amount_to_sell_first_part_tokens = buy_amount_usd / price_usd
+                                amount_to_sell_first_part_tokens = buy_amount_sol / price_sol
                                 tx_signature, ms_time_taken, success = await self._swap_tokens(
                                     swap_type="SELL",
                                     mint=mint,
@@ -713,6 +771,23 @@ class Moonshot:
                                     
                                     sell_body = True
                                     logger.success(f"{init_msg} We are sell body for mint - {mint}")
+                                    
+                                    try:
+                                        swap_price = await self.extract_sol_amount_from_buy_transaction(sig=tx_signature)
+                                        if swap_price:
+                                            data = AnalyticData(
+                                                time=time.time(),
+                                                mint1_addr=mint,
+                                                capture_time=capture_time.timestamp(),
+                                                swap_price=swap_price,
+                                                swap_time=swap_time.timestamp(),
+                                                percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100
+                                            )
+                                    except Exception as e:
+                                        logger.exception(e)
+                                    
+                                    data.comment = init_msg
+                                    await repo.add_analytic(data)
                                     break
                                 else:
                                     failed += 1
@@ -765,16 +840,19 @@ async def main():
     from solders.signature import Signature
     
     m = Moonshot()
-    q = asyncio.Queue()
-    mint = "BdgT2QewMPZ291P2H4iZTPsZWhZbYRocUMqW1N6uvFVY"
-    print("start ", mint)
+    # q = asyncio.Queue()
+    # mint = "BdgT2QewMPZ291P2H4iZTPsZWhZbYRocUMqW1N6uvFVY"
+    # print("start ", mint)
     
     # m._setup_grpc_stub()
-    # print(
-    #     await m.is_mint_in_wallet(
-    #         "9PUEb56bXipsmD1ezRPfKeyLXc5VyKXFRsvtUZtnPxPD", 50000
-    #     )
-    # )
+    print(
+        await m.extract_sol_amount_from_buy_transaction(
+            # "31fdFipd832bF1AEWsdE4BKbbUY6KC5bvSQHTf8PdBDxBTSaaWXtfJDprpSbG7YrhPRJvgZ3QWXrS8mQMtTGrsQy"
+            # "57dBio85UY53EbXjMhUSyhN3FJ5CReuaDWkVZJ3RDDQQu6cTToSjwC1zbD8CFYeHL2f6kwZewUHHFeAdhK9c6PLc",
+            # "5WuqBSR3t72MWk2mpsB546ntcAtynJbbRpLV1LLRKMLTh5FahvDS2EPAHX4iTRhHxGL8nBq6F9nCkgb4jVrYy37E",
+            "2JHfBREFyoNSrFh4Fmq1HMXBPLpGGrw6qqE8FE3dkJ5o5FpPL77TPpgtfdJuq7yvAXWaGLtytWzLqfqcGTg7RN85"
+        )
+    )
     # m.subscribe_to_moonshot_mints_create(queue=q)
     # m._moonshot_client._mints_price_watch.append(mint)
     # m.handle_transaction(mint=mint, transaction_received=datetime.now(), signature="")
