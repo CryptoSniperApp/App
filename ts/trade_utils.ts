@@ -175,20 +175,54 @@ export async function swapTokens(
 
     let start = Date.now();
 
-    let t = new web3.Transaction();
-    t.add(priorityIx, ...ixs);
-    t.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    t.sign(creator);
-
     let txHash;
     if (confirmTransaction) {
-        txHash = await web3.sendAndConfirmTransaction(connection, t, [creator], {
-            commitment: commitment,
-        });
+        var attempt = 0;
+
+        while (attempt < 3) {
+            try {
+                
+                let t = new web3.Transaction();
+                t.add(priorityIx, ...ixs);
+                let blockhash = await connection.getLatestBlockhash();
+                t.recentBlockhash = blockhash.blockhash;
+                t.sign(creator);
+
+                txHash = await connection.sendRawTransaction(t.serialize(), {
+                    skipPreflight: true,
+                    maxRetries: 5,
+                    preflightCommitment: commitment,
+                });
+                await connection.confirmTransaction({
+                    blockhash: blockhash.blockhash,
+                    lastValidBlockHeight: blockhash.lastValidBlockHeight,
+                    signature: txHash
+                })
+                console.log(`Transaction ${txHash} confirmed successfully on attempt ${attempt + 1}`);
+                break
+            } catch (error: any) {
+                console.error(
+                    `error when confirm transaction on ${txType} 
+                    Moonshot: ${error}. trace ${error.stack}`
+                )
+                await new Promise(res => setTimeout(res, 2000));
+            }
+            attempt++
+        }
+        if (!txHash) {
+            throw new Error(`error when sending transaction on ${txType}`)
+        }
     } else {
+
+        let t = new web3.Transaction();
+        t.add(priorityIx, ...ixs);
+        let blockhash = await connection.getLatestBlockhash();
+        t.recentBlockhash = blockhash.blockhash;
+        t.sign(creator);
+
         txHash = await connection.sendRawTransaction(t.serialize(), {
             skipPreflight: true,
-            maxRetries: 20,
+            maxRetries: 15,
             preflightCommitment: commitment,
         });
     }

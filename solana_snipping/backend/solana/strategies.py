@@ -224,6 +224,9 @@ class Moonshot:
     def handle_transaction(
         self, signature: str, transaction_received: datetime, mint: str
     ):
+        if not self._grpc_conn:
+            self._setup_grpc_stub()
+                
         f = asyncio.eager_task_factory(
             loop=self._loop,
             coro=self._process_data(mint, transaction_received, signature),
