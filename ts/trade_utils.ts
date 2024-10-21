@@ -68,9 +68,13 @@ export async function swapTokens(
         rpcUrl,
         environment: Environment.MAINNET,
     });
-    (moonshot.provider as any)._connection = connection;
-    (moonshot.provider as any).setProvider();
-    
+
+    let provider = new MyAnchorProviderV1(rpcUrl, {
+        commitment: 'confirmed',
+    });
+    provider.setConnection(connection);
+    moonshot.provider = provider;
+
     if (txType === "SELL" && amount === 0) {
         let ata = await getAssociatedTokenAccount(mintAddress, kp.publicKey.toBase58());
         amount = await getTokenAmountInWallet(connection, ata.toBase58()) as number;
@@ -201,11 +205,11 @@ export async function swapTokens(
                 console.log(`Transaction ${txHash} confirmed successfully on attempt ${attempt + 1}`);
                 break
             } catch (error: any) {
-                console.error(
+                console.info(
                     `error when confirm transaction on ${txType} 
                     Moonshot: ${error}. trace ${error.stack}`
                 )
-                await new Promise(res => setTimeout(res, 2000));
+                await new Promise(res => setTimeout(res, 1500));
             }
             attempt++
         }
@@ -311,15 +315,17 @@ async function sellAll(connection: Connection, kp: Keypair) {
         'confirmed'
     )
     console.log('accounts', accounts);
-    accounts.value.forEach(async (accountInfo) => {
-    // for (let accountInfo of accounts.value) {
+    var att = 0;
+    let promises: any[] = [];
+
+    for (let accountInfo of accounts.value) {
         let amount = accountInfo.account.data["parsed"]["info"]["tokenAmount"]["amount"];
+        let decimals = accountInfo.account.data["parsed"]["info"]["tokenAmount"]["decimals"];
         console.log(`pubkey: ${accountInfo.pubkey.toBase58()}`);
         console.log(`mint: ${accountInfo.account.data["parsed"]["info"]["mint"]}`);
         console.log(
           `owner: ${accountInfo.account.data["parsed"]["info"]["owner"]}`,
         );
-        let decimals = accountInfo.account.data["parsed"]["info"]["tokenAmount"]["decimals"];
         console.log(
           `decimals: ${decimals}`,
         );
@@ -330,7 +336,7 @@ async function sellAll(connection: Connection, kp: Keypair) {
 
         if (amount != null && `${amount}` !== "0" && amount < 500_000 * (10 ** decimals) ) {
             try {
-                await swapTokens(
+                let promise = swapTokens(
                     connection,
                     "SELL",
                     accountInfo.account.data["parsed"]["info"]["mint"],
@@ -341,21 +347,30 @@ async function sellAll(connection: Connection, kp: Keypair) {
                     9,
                     'confirmed'
                 )
+                promises.push(promise)
             } catch (error) {
                 console.error(error);
             }
         }
         if ( `${amount}` !== "0" ) {
-            return;
+            continue;
         }
-        await closeTokenAccount(
+        att++;
+        if (att > 5) {
+            return
+        }
+        // console.log(att);
+        let promise = closeTokenAccount(
             accountInfo.pubkey.toBase58(),
             kp,
             connection,
             kp.publicKey,
             kp.publicKey
         );
-    });
+        promises.push(promise);
+    };
+
+    await Promise.all(promises)
 }
 
 
@@ -585,9 +600,11 @@ async function test() {
     // console.log(kp.publicKey.toBase58());
     // return;
     let connection = new ConnectionSolanaPool().getConnectionWithProxy();
+    (connection as any).proxy = true;
+
     // let connection = new Connection(web3.clusterApiUrl("mainnet-beta"), "confirmed");
     // let latestBlockhash = await connection.getLatestBlockhash();
-    // console.log(latestBlockhash);
+    // console.log(connection);
     // return
 
     // let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';

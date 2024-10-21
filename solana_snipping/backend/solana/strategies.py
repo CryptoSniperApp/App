@@ -226,7 +226,7 @@ class Moonshot:
     ):
         if not self._grpc_conn:
             self._setup_grpc_stub()
-                
+
         f = asyncio.eager_task_factory(
             loop=self._loop,
             coro=self._process_data(mint, transaction_received, signature),
@@ -556,7 +556,7 @@ class Moonshot:
             if failed > 3:
                 logger.warning(
                     f"Пробовали купить {buy_amount} токенов "
-                    f"{mint} несколько раз. Не получилось. Выходим из функции"
+                    f"{mint} несколько раз. ошибка: {error}. Не получилось. Выходим из функции"
                 )
                 return
             
