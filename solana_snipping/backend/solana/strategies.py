@@ -535,7 +535,7 @@ class Moonshot:
         buy_amount_usd = None # какой эквивалент в токенах покупаем
         buy_amount_sol = None  # сколько токенов мы купили в sol
         
-        buy_amount = 150_000 # сколько токенов покупаем
+        buy_amount = 250_000 # сколько токенов покупаем
         start_function_time = time.time()
         
         failed = 0
@@ -777,11 +777,10 @@ class Moonshot:
                         await repo.add_analytic(data)
 
                         logger.debug(
-                            f"Swap price USD: {price_usd}, SOL: {price_sol}, first swap price "
-                            f"USD: {first_swap_price}. Max SOL price: "
-                            f"{max_price_sol}. Percentage diff: "
-                            f"{percentage_diff}. "
-                            f"mint - {mint}"
+                            f"Swap price USD: {price_usd}, SOL: {price_sol}.\nFirst swap price "
+                            f"USD: {first_swap_price}.\nMax SOL price: "
+                            f"{max_price_sol}.\nPercentage diff: "
+                            f"{percentage_diff}.\nMint - {mint}"
                         )
 
                         if sell_body and percentage_diff >= percents_diff_for_sell:
