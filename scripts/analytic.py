@@ -60,7 +60,7 @@ class ReadableAnalytic:
                 "Цена в USD в начале": format_number_decimal(amount_start),
                 "Минимальная цена в USD": format_number_decimal(min_amount),
                 "Максимальная цена в USD": format_number_decimal(max_amount),
-                "Разница в %": last_percent_diffirence,
+                # "Разница в %": last_percent_diffirence,
                 "Разница между начальной и максимальной ценой в %": (max_amount - amount_start) / amount_start * 100,
                 # "Первая ликвидность": first_liquidity,
                 # "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M:%S %d.%m.%Y") if pool_open_time else "",
@@ -76,7 +76,7 @@ class ReadableAnalytic:
             data.append(obj)
         
         data = sorted(data, key=lambda x: x["Время слежки"], reverse=True)
-        data = sorted(data, key=lambda x: x["Разница в %"], reverse=True)
+        data = sorted(data, key=lambda x: x["Разница между начальной и максимальной ценой в %"], reverse=True)
         return pd.DataFrame(data)
 
 

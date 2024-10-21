@@ -290,15 +290,21 @@ class Moonshot:
         )
         
         if not resp.success:
+            log_method = logger.error
+            if resp.error.count("block height exceeded"):
+                log_method = logger.warning
+            elif resp.error.count("could not find account"):
+                log_method = logger.warning
+                
             msg = (
                 f"Не удалось совершить swap для {mint} ({swap_type}). "
                 f"Error - {resp.error}.\nВремя транзакции - {resp.ms_time_taken}\n"
                 f"Результат - {resp.tx_signature}"
             )
-            logger.error(msg)
-            return [resp.tx_signature, resp.ms_time_taken, False]
+            log_method(msg)
+            return [resp.tx_signature, resp.ms_time_taken, False, str(resp.error)]
         
-        return [resp.tx_signature, resp.ms_time_taken, True]
+        return [resp.tx_signature, resp.ms_time_taken, True, ""]
     
     @property
     def _private_wallet_key(self):
@@ -471,7 +477,7 @@ class Moonshot:
         failed = 0
         data = {"success": False, "error": ""}
         while True:
-            tx_signature, ms_time_taken, success = await self._swap_tokens(
+            tx_signature, ms_time_taken, success, error = await self._swap_tokens(
                 swap_type="SELL",
                 mint=mint,
                 private_wallet_key=self._private_wallet_key,
@@ -487,12 +493,16 @@ class Moonshot:
                 logger.info(f"{init_msg} Не удалось продать все токены из за неудачной транзакции ({mint})")
                 return data
             
+            if tx_signature:
+                break
+            elif error.count("could not find account"):
+                data["success"] = True
+                data["error"] = error
+                return data
             if not success:
                 await asyncio.sleep(5)
                 failed += 1
-            elif tx_signature:
-                break
-        
+                
             await asyncio.sleep(10)
         
         is_success, error = await self.is_transaction_success(tx_signature)
@@ -501,7 +511,7 @@ class Moonshot:
                 data["error"] = error
                 return data
             elif error:
-                logger.error(f"{init_msg} Получили ошибку после попытки продать все токены. {error}")    
+                logger.error(f"{init_msg} Получили ошибку после попытки продать все токены. {error}. sig - {tx_signature}. mint - {mint}")    
                 data["error"] = str(error)
                 return data
         
@@ -530,7 +540,7 @@ class Moonshot:
         
         failed = 0
         while True:
-            buy_tx_signature, ms_time_taken, success = await self._swap_tokens(
+            buy_tx_signature, ms_time_taken, success, error = await self._swap_tokens(
                 swap_type="BUY",
                 mint=mint,
                 private_wallet_key=self._private_wallet_key,
@@ -613,7 +623,7 @@ class Moonshot:
             if time.time() - price_updated_at < max_time:
                 return
             
-            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ {max_time} СЕКУНДЫ]"
+            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ {max_time} СЕКУНД]"
             logger.info(f"{init_msg}. С момента первой покупки прошло {int(time.time() - start_function_time)} секунд ({mint}). Продаем все")
             
             result = await self._sell_all_tokens(
@@ -628,7 +638,7 @@ class Moonshot:
                     exit_from_monitor = True
                     scheduler.remove_job(job.id)
                 else:
-                    logger.warning(f"{init_msg} Получили ошибку после попытки продать все токены. {error}")    
+                    logger.warning(f"{init_msg} Получили ошибку после попытки продать все токены. {error}. tx_signature - {result["tx_signature"]}. mint - {mint}")    
                 return
             
             exit_from_monitor = True
@@ -636,7 +646,7 @@ class Moonshot:
             logger.success(
                 f"{init_msg} Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
                 f"время выполнения - {result["ms_time_taken"]} ms, "
-                f"сигнатура - {result["tx_signature"]}"
+                f"сигнатура - {result["tx_signature"]}. mint - {mint}"
             )
             
         scheduler = AsyncIOScheduler()
@@ -767,7 +777,11 @@ class Moonshot:
                         await repo.add_analytic(data)
 
                         logger.debug(
-                            f"Swap price USD: {price_usd}, first swap price USD: {first_swap_price}. Percentage diff: {percentage_diff}. mint - {mint}"
+                            f"Swap price USD: {price_usd}, SOL: {price_sol}, first swap price "
+                            f"USD: {first_swap_price}. Max SOL price: "
+                            f"{max_price_sol}. Percentage diff: "
+                            f"{percentage_diff}. "
+                            f"mint - {mint}"
                         )
 
                         if sell_body and percentage_diff >= percents_diff_for_sell:
@@ -775,7 +789,7 @@ class Moonshot:
                             init_msg = "[ВЫВОДИМ ОСТАТОК]"
                             while True:
                                 swap_time = datetime.now()
-                                tx_signature, ms_time_taken, success = await self._swap_tokens(
+                                tx_signature, ms_time_taken, success, error = await self._swap_tokens(
                                     swap_type="SELL",
                                     mint=mint,
                                     private_wallet_key=self._private_wallet_key,
@@ -844,7 +858,7 @@ class Moonshot:
                                 # продаем вложенные доллары
                                 # amount_to_sell_first_part_tokens = buy_amount_usd / price_usd
                                 amount_to_sell_first_part_tokens = buy_amount_sol / price_sol
-                                tx_signature, ms_time_taken, success = await self._swap_tokens(
+                                tx_signature, ms_time_taken, success, error = await self._swap_tokens(
                                     swap_type="SELL",
                                     mint=mint,
                                     private_wallet_key=self._private_wallet_key,

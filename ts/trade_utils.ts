@@ -62,6 +62,7 @@ export async function swapTokens(
         decimals = 9;
     }
 
+    let kp = Keypair.fromSecretKey(base58.decode(privateKey));
     let rpcUrl = connection.rpcEndpoint;
     const moonshot = new Moonshot({
         rpcUrl,
@@ -547,14 +548,16 @@ async function test() {
     var privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
     let chainStackRpcEndpoint = process.env.MOONSHOT_RPC_ENDPOINT as string;
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
-    console.log(kp.publicKey.toBase58());
+    // console.log(kp.publicKey.toBase58());
+    // return;
     let connection = new ConnectionSolanaPool().getConnectionWithProxy();
-    // let connection = new Connection(rpcUrl, "confirmed");
+    // let connection = new Connection(web3.clusterApiUrl("mainnet-beta"), "confirmed");
     // let latestBlockhash = await connection.getLatestBlockhash();
     // console.log(latestBlockhash);
     // return
 
     // let mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
+
     var mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
     mint = '3SqaeJ6bhEQNRod5wJyDYyq6N28Wwz2jcEM5J8H9Rp9q';
     mint = '41upazdWAgLjfCkLGQwGDgj2knovnpPyr4q2ZVNjifLz'
@@ -600,7 +603,7 @@ async function test() {
 
 
 export const privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
-export const kp = Keypair.fromSecretKey(base58.decode(privateKey));
+// export const kp = Keypair.fromSecretKey(base58.decode(privateKey));
 
 
 // test();
