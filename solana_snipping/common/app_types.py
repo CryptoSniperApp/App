@@ -19,4 +19,5 @@ class AnalyticData(BaseModel):
     swap_price: float | N = N
     percentage_difference: float | N = N
     comment: str | N = N
+    meta: str | N = N
     

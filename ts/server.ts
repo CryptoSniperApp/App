@@ -397,6 +397,41 @@ const tokensImpl: pools.TokensSolanaServer = {
     }
 
     callback(null, response);
+  },
+  async decodeMoonshotBuyInstruction(
+    call: grpc.ServerUnaryCall<pools.DecodeMoonshotBuyInstructionData, pools.DecodeMoonshotBuyInstructionData>, 
+    callback
+  ): Promise<void> {
+    let response;
+    let start = Date.now();
+    
+    try {
+      let connection = connPool.getConnectionWithProxy();
+      let provider = new MyAnchorProviderV1(connection.rpcEndpoint, {
+          commitment: 'confirmed',
+      });
+      let result = (provider.program.coder.instruction as any).decode(call.request.instructionData);
+      
+      result.data.data.slippageBps = BigInt(result.data.data.slippageBps).toString()
+      result.data.data.collateralAmount = BigInt(result.data.data.collateralAmount).toString()
+      result.data.data.tokenAmount = BigInt(result.data.data.tokenAmount).toString()
+
+      var obj = JSON.stringify(result);
+      response = pools.ResponseRpcOperation.create({
+        success: true,
+        rawData: obj,
+        msTimeTaken: `${Date.now() - start}`
+      })
+
+    } catch (error: any) {
+      response = pools.ResponseRpcOperation.create({
+        success: false,
+        error: `${error}. stack: ${error.stack}`,
+        msTimeTaken: `${Date.now() - start}`
+      })
+    }
+
+    callback(null, response);
   }
 }
 

@@ -122,6 +122,11 @@ message DecodeMoonshotMintInstructionData {
 }
 
 
+message DecodeMoonshotBuyInstructionData {
+    bytes instruction_data = 1;
+}
+
+
 service PoolState {
     rpc getPoolState(RequestPoolState) returns (ResponsePoolStateOperation);
 }
@@ -134,5 +139,6 @@ service TokensSolana {
     rpc transferSolToWallets(TransferSolToWallets) returns (ResponseRpcOperation);
     rpc receiveSolFromWallets(ReceiveSolFromWallets) returns (ResponseRpcOperation);
     rpc decodeMoonshotMintInstruction(DecodeMoonshotMintInstructionData) returns (ResponseRpcOperation);
+    rpc decodeMoonshotBuyInstruction(DecodeMoonshotBuyInstructionData) returns (ResponseRpcOperation);
 }
 

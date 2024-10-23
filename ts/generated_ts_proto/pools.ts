@@ -141,6 +141,10 @@ export interface DecodeMoonshotMintInstructionData {
   instructionData: Uint8Array;
 }
 
+export interface DecodeMoonshotBuyInstructionData {
+  instructionData: Uint8Array;
+}
+
 function createBaseResponsePoolState(): ResponsePoolState {
   return {
     baseDecimal: 0,
@@ -1943,6 +1947,70 @@ export const DecodeMoonshotMintInstructionData: MessageFns<DecodeMoonshotMintIns
   },
 };
 
+function createBaseDecodeMoonshotBuyInstructionData(): DecodeMoonshotBuyInstructionData {
+  return { instructionData: new Uint8Array(0) };
+}
+
+export const DecodeMoonshotBuyInstructionData: MessageFns<DecodeMoonshotBuyInstructionData> = {
+  encode(message: DecodeMoonshotBuyInstructionData, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.instructionData.length !== 0) {
+      writer.uint32(10).bytes(message.instructionData);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DecodeMoonshotBuyInstructionData {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDecodeMoonshotBuyInstructionData();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.instructionData = reader.bytes();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DecodeMoonshotBuyInstructionData {
+    return {
+      instructionData: isSet(object.instructionData) ? bytesFromBase64(object.instructionData) : new Uint8Array(0),
+    };
+  },
+
+  toJSON(message: DecodeMoonshotBuyInstructionData): unknown {
+    const obj: any = {};
+    if (message.instructionData.length !== 0) {
+      obj.instructionData = base64FromBytes(message.instructionData);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DecodeMoonshotBuyInstructionData>, I>>(
+    base?: I,
+  ): DecodeMoonshotBuyInstructionData {
+    return DecodeMoonshotBuyInstructionData.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DecodeMoonshotBuyInstructionData>, I>>(
+    object: I,
+  ): DecodeMoonshotBuyInstructionData {
+    const message = createBaseDecodeMoonshotBuyInstructionData();
+    message.instructionData = object.instructionData ?? new Uint8Array(0);
+    return message;
+  },
+};
+
 export type PoolStateService = typeof PoolStateService;
 export const PoolStateService = {
   getPoolState: {
@@ -2055,6 +2123,16 @@ export const TokensSolanaService = {
     responseSerialize: (value: ResponseRpcOperation) => Buffer.from(ResponseRpcOperation.encode(value).finish()),
     responseDeserialize: (value: Buffer) => ResponseRpcOperation.decode(value),
   },
+  decodeMoonshotBuyInstruction: {
+    path: "/TokensSolana/decodeMoonshotBuyInstruction",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: DecodeMoonshotBuyInstructionData) =>
+      Buffer.from(DecodeMoonshotBuyInstructionData.encode(value).finish()),
+    requestDeserialize: (value: Buffer) => DecodeMoonshotBuyInstructionData.decode(value),
+    responseSerialize: (value: ResponseRpcOperation) => Buffer.from(ResponseRpcOperation.encode(value).finish()),
+    responseDeserialize: (value: Buffer) => ResponseRpcOperation.decode(value),
+  },
 } as const;
 
 export interface TokensSolanaServer extends UntypedServiceImplementation {
@@ -2065,6 +2143,7 @@ export interface TokensSolanaServer extends UntypedServiceImplementation {
   transferSolToWallets: handleUnaryCall<TransferSolToWallets, ResponseRpcOperation>;
   receiveSolFromWallets: handleUnaryCall<ReceiveSolFromWallets, ResponseRpcOperation>;
   decodeMoonshotMintInstruction: handleUnaryCall<DecodeMoonshotMintInstructionData, ResponseRpcOperation>;
+  decodeMoonshotBuyInstruction: handleUnaryCall<DecodeMoonshotBuyInstructionData, ResponseRpcOperation>;
 }
 
 export interface TokensSolanaClient extends Client {
@@ -2169,6 +2248,21 @@ export interface TokensSolanaClient extends Client {
   ): ClientUnaryCall;
   decodeMoonshotMintInstruction(
     request: DecodeMoonshotMintInstructionData,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  decodeMoonshotBuyInstruction(
+    request: DecodeMoonshotBuyInstructionData,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  decodeMoonshotBuyInstruction(
+    request: DecodeMoonshotBuyInstructionData,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  decodeMoonshotBuyInstruction(
+    request: DecodeMoonshotBuyInstructionData,
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,

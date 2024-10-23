@@ -138,6 +138,11 @@ class DecodeMoonshotMintInstructionData(betterproto.Message):
     instruction_data: bytes = betterproto.bytes_field(1)
 
 
+@dataclass
+class DecodeMoonshotBuyInstructionData(betterproto.Message):
+    instruction_data: bytes = betterproto.bytes_field(1)
+
+
 class PoolStateStub(betterproto.ServiceStub):
     async def get_pool_state(
         self, *, pool_data: bytes = b""
@@ -265,6 +270,18 @@ class TokensSolanaStub(betterproto.ServiceStub):
 
         return await self._unary_unary(
             "/TokensSolana/decodeMoonshotMintInstruction",
+            request,
+            ResponseRpcOperation,
+        )
+
+    async def decode_moonshot_buy_instruction(
+        self, *, instruction_data: bytes = b""
+    ) -> ResponseRpcOperation:
+        request = DecodeMoonshotBuyInstructionData()
+        request.instruction_data = instruction_data
+
+        return await self._unary_unary(
+            "/TokensSolana/decodeMoonshotBuyInstruction",
             request,
             ResponseRpcOperation,
         )

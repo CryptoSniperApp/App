@@ -4,6 +4,7 @@ from grpclib.client import Channel
 from solana.rpc.async_api import AsyncClient
 from solders.rpc.responses import GetTransactionResp
 from solders.signature import Signature
+from solders.transaction import Transaction
 import ua_generator
 import aiohttp
 import asyncio
@@ -141,7 +142,7 @@ class MoonshotAPI:
                     None,
                 )
                 if start_pool_instruction_i is None or end_pool_instruction_i is None:
-                    return
+                    continue
 
                 # signature = trans['transaction']['signatures'][0]
                 signature = trans['transaction']
@@ -157,7 +158,7 @@ class MoonshotAPI:
                     )
                     for needed_instruction in needed_instructions
                 ):
-                    return
+                    continue
                 
                 ...
                 # bytes_data = await client.get_transaction(
@@ -200,8 +201,8 @@ class MoonshotAPI:
                 program_address = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG"
                 async with websockets.client.connect(
                     # "wss://api.mainnet-beta.solana.com",
-                    # "wss://solana-mainnet.core.chainstack.com/1f0c0d85ee1233545fc318f123c5eb8e",
-                    "wss://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq",
+                    "wss://solana-mainnet.core.chainstack.com/e1bdb461a462bbd0c7d6f8e6fe5d97d7",
+                    # "wss://solana-mainnet.g.a lchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq",
                     ping_interval=None
                 ) as websocket:
                     msg = orjson.dumps(
@@ -255,7 +256,7 @@ class MoonshotAPI:
                         )
                         # await asyncio.sleep(1000)
                         
-            except websockets.exceptions.   ConnectionClosedError:
+            except websockets.exceptions.ConnectionClosedError:
                 await asyncio.sleep(3)
             except Exception as e:
                 logger.exception(e)
@@ -299,6 +300,21 @@ class MoonshotAPI:
             amount=int(token_data["amount"])
         )
         return event
+    
+    async def parse_buy_instruction_data(self, encoded_data: bytes) -> dict | pools.ResponseRpcOperation:
+        if self._grpc_conn is None:
+            self._setup_grpc_stub()
+        res = await self._grpc_conn.decode_moonshot_buy_instruction(instruction_data=encoded_data)
+        if not res.success:
+            logger.error(f"получили ошибку когда пытались декодировать buy moonshot instruction data. error data: {res.error}")
+            return res
+        
+        token_data = orjson.loads(res.raw_data)
+        token_data['data']['data']['tokenAmount'] = int(token_data['data']['data']['tokenAmount'])
+        token_data['data']['data']['collateralAmount'] = int(token_data['data']['data']['collateralAmount'])
+        token_data['data']['data']['slippageBps'] = int(token_data['data']['data']['slippageBps'])
+        
+        return token_data
 
     async def subscribe_to_dexscreener_moonshot_mints_create(
         self, queue: asyncio.Queue
@@ -671,7 +687,8 @@ class MoonshotAPI:
 async def main():
     moonshot = MoonshotAPI()
     queue = asyncio.Queue()
-    client = AsyncClient('https://solana-mainnet.core.chainstack.com/1f0c0d85ee1233545fc318f123c5eb8e', "confirmed")
+    # client = AsyncClient('https://solana-mainnet.core.chainstack.com/1f0c0d85ee1233545fc318f123c5eb8e', "confirmed")
+    client = AsyncClient('https://api.mainnet-beta.solana.com/', "confirmed")
     # r = await client.get_transaction(
     #     Signature.from_string("2ZhnKAsButWtx6RfHRxqfiycrESQVN1F9LZLky4rgknsRMLyuqJHeGXxNjeaDWKR6CQnBUxDyoaRZohrzSFG9kL3"),
     #     encoding="base64",
@@ -695,6 +712,112 @@ async def main():
     # grpc = TokensSolanaStub(Channel())
     # parsed = await grpc.decode_moonshot_mint_instruction(instruction_data=data)
     # print(parsed)
+    # block = await client.get_block(297224578, max_supported_transaction_version=0, encoding="jsonParsed")
+    # sig = '2kb7J6J9DSwQH1pc75BeGVv4Tcmu1HHuGxaqq9yGZbUF28Da1heif56S37g9drXdRZtRHTaNBQmkt3PFipGM3rgT'
+    # # t = await client.get_transaction(Signature.from_string(sig), max_supported_transaction_version=0, encoding="jsonParsed")
+    
+    # time = datetime.now()
+    # block_data = orjson.loads(block.to_json())
+    # transactions = block_data["result"]["transactions"]
+    # program_address = 'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG'
+    # needed_instructions = ["TokenMint"]
+    
+    # for trans in transactions:
+    #     # trans = orjson.loads(t.to_json())['result']
+    #     # if sig in [str(s) for s in trans["transaction"]["signatures"]]:
+    #     #     ...
+    #     # trans = transactions[800]
+    #     instructions = trans['meta']['logMessages']
+        
+    #     start_pool_instruction_i = next(
+    #         (
+    #             instructions.index(instr)
+    #             for instr in instructions
+    #             if instr.count(
+    #                 f"Program {program_address} invoke [1]"
+    #             )
+    #         ),
+    #         None,
+    #     )
+    #     end_pool_instruction_i = next(
+    #         (
+    #             instructions.index(instr)
+    #             for instr in instructions
+    #             if instr.count(
+    #                 f"Program {program_address} success"
+    #             )
+    #         ),
+    #         None,
+    #     )
+    #     moon = next(
+    #         (
+    #             instructions.index(instr)
+    #             for instr in instructions
+    #             if instr.count(
+    #                 f"Program {program_address}"
+    #             )
+    #         ),
+    #         None,
+    #     )
+    #     if start_pool_instruction_i is None or end_pool_instruction_i is None:
+    #         continue
+
+    #     # signature = trans['transaction']['signatures'][0]
+    #     signature = trans['transaction']
+    #     pool_instructions = instructions[
+    #         start_pool_instruction_i : end_pool_instruction_i + 1
+    #     ]
+    #     if trans["meta"]["err"] or not all(
+    #         any(
+    #             instruction.lower().count(
+    #                 f"Program log: Instruction: {needed_instruction}".lower()
+    #             )
+    #             for instruction in pool_instructions
+    #         )
+    #         for needed_instruction in needed_instructions
+    #     ):
+    #         continue
+        
+    #     ...
+    #     # bytes_data = await client.get_transaction(
+    #     #     Signature.from_string(signature),
+    #     #     encoding="base64",
+    #     #     max_supported_transaction_version=0
+    #     # )
+    #     # ...
+    #     # instruction = [
+    #     #     i for i in 
+    #     #     bytes_data.value.transaction.transaction.message.instructions
+    #     #     if len(i.accounts) == 11
+    #     # ][0]
+    #     # data = instruction.data
+        
+    #     # block = await client.get_block(
+    #     #     slot=log_data['params']['result']['context']['slot'],
+    #     #     max_supported_transaction_version=0, encoding="base64"
+    #     # )
+        
+    #     # transactions = [
+    #     #     b 
+    #     #     for b in block.value.transactions
+    #     #     if any(log.count('TokenMint') for log in b.meta.log_messages)
+    #     # ]
+    #     # inst = [i for i in transactions[0].transaction.message.instructions if len(i.accounts) == 11]
+    #     # data = inst[0].data
+        
+    #     instruction = [
+    #         i
+    #         for i in trans['transaction']['message']['instructions']
+    #         if len(i["accounts"]) == 11
+    #     ][0]
+    #     data = instruction['data']
+    #     # data = base64.b64decode(trans['transaction'][0])
+
+    #     parsed = await moonshot.parse_mint_instruction_data(data)
+    #     now = datetime.now()
+    #     data = (signature, time.isoformat(), now.isoformat(), parsed)
+    #     print(data)
+    
     # return
     await moonshot._scan_new_mints_mainnet_beta(queue)
     # await moonshot.subscribe_to_dexscreener_moonshot_mints_create(queue)

@@ -30,6 +30,7 @@ betterproto = {extras = ["compiler"], version = "^1.2.5"}
 grpcio-tools = "^1.66.1"
 pydantic = "^2.8.2"
 apscheduler = "^3.10.4"
+base58 = "^2.1.1"
 
 
 [build-system]
