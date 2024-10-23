@@ -656,6 +656,7 @@ class Moonshot:
             return
         
         need_to_sell = False
+        creator_buy_amount = None
         for _ in range(3):
             init_msg = f"[ПРОДАЕМ ВСЕ ТОКЕНЫ ТАК КАК КРЕАТОР КУПИЛ {creator_buy_amount}]"
             try:

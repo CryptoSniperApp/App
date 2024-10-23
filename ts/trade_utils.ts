@@ -87,6 +87,7 @@ export async function swapTokens(
             for (let i = 0; i < 15; i++) {
                 try {
                     curvePos = await token.getCurvePosition();
+                    break;
                 } catch (error: any)  { 
                     console.log(`${error}. ${error.stack}`)
                     await new Promise(res => setTimeout(res, 1500));
@@ -618,8 +619,8 @@ async function test() {
     let kp = Keypair.fromSecretKey(base58.decode(privateKey));
     // console.log(kp.publicKey.toBase58());
     // return;
-    // let connection = new ConnectionSolanaPool().getConnectionWithProxy();
-    // (connection as any).proxy = true;
+    let connection = new ConnectionSolanaPool().getConnectionWithProxy();
+    (connection as any).proxy = true;
 
     // let connection = new Connection(web3.clusterApiUrl("mainnet-beta"), "confirmed");
     // let latestBlockhash = await connection.getLatestBlockhash();
@@ -632,7 +633,7 @@ async function test() {
     mint = '3SqaeJ6bhEQNRod5wJyDYyq6N28Wwz2jcEM5J8H9Rp9q';
     mint = '41upazdWAgLjfCkLGQwGDgj2knovnpPyr4q2ZVNjifLz'
     mint = 'GLeMhfYHSHW12o4UC8b8tb7YriMp6tybpEFBUxjf7okf';
-    mint = 'F9m8YsLEqDYfrcuDpWUpratKVjYd7ZgvyhcyLSzpM7ps';
+    mint = '3eR3CfrR82NZyPiHDqECP9oTf43pQgwMVUL1Fv8YwZLc';
 
 
     // let ata = await getAssociatedTokenAccount(mint, kp.publicKey.toBase58());
@@ -654,32 +655,32 @@ async function test() {
     // let rpcUrl = process.env.MOONSHOT_RPC_ENDPOINT as string;
     // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq';
     // let rpcUrl = 'https://solana-mainnet.core.chainstack.com/e1bdb461a462bbd0c7d6f8e6fe5d97d7'
-    let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq'
-    const connection = new Connection(rpcUrl, "confirmed");
+    // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq'
+    // const connection = new Connection(rpcUrl, "confirmed");
 
-    let promises = [];
-    console.log('started');
-    let start = Date.now();
-    for (let i = 0; i < 1; i++) {
-        promises.push(swapTokens(
-            connection,
-            "BUY",
-            mint,
-            privateKey, 
-            15,
-            1000, 800_000
-        ));
-    }
-    await Promise.all(promises);
-    console.log('Main time taken', Date.now() - start);
+    // let promises = [];
+    // console.log('started');
+    // let start = Date.now();
+    // for (let i = 0; i < 1; i++) {
+    //     promises.push(swapTokens(
+    //         connection,
+    //         "BUY",
+    //         mint,
+    //         privateKey, 
+    //         15,
+    //         1000, 800_000
+    //     ));
+    // }
+    // await Promise.all(promises);
+    // console.log('Main time taken', Date.now() - start);
 
-    // await swapTokens(
-    //     connection,
-    //     "BUY",
-    //     mint,
-    //     privateKey, 
-    //     15,
-    // )
+    await swapTokens(
+        connection,
+        "BUY",
+        mint,
+        privateKey, 
+        15,
+    )
     // await sellAll(connection, kp);
 }
 
