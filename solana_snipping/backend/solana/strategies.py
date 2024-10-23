@@ -583,7 +583,10 @@ class Moonshot:
                 raise ValueError(f"transaction has error: {meta.err}")
             
             transaction = resp.value.transaction.transaction
-            buy_data = transaction.message.instructions[2].data
+            instructions = transaction.message.instructions
+            if len(instructions) < 3:
+                return
+            buy_data = instructions[2].data
             parsed_instruction = await self._moonshot_client.parse_buy_instruction_data(base58.b58decode(buy_data))
             
             return parsed_instruction['data']['data']['tokenAmount'] / 1_000_000_000
@@ -682,7 +685,21 @@ class Moonshot:
         if need_to_sell:
             return
         
-        buy_amount_sol = await self.extract_sol_amount_from_buy_transaction(buy_tx_signature)
+        buy_amount_sol = None
+        for _ in range(5):
+            buy_amount_sol = await self.extract_sol_amount_from_buy_transaction(buy_tx_signature)
+            if buy_amount_sol is None:
+                await asyncio.sleep(3)
+                continue
+            break
+        
+        if buy_amount_sol is None:
+            await self._sell_all_tokens(
+                init_msg=f"[НЕ УДАЛОСЬ ПОЛУЧИТЬ ЗНАЧЕНИЕ В SOL НАШЕЙ ПОКУПКИ]",
+                mint=mint
+            )
+            return
+
         end_function_time = time.time() 
         capture_time = datetime.now()
         message = (
