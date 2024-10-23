@@ -388,7 +388,7 @@ class MoonshotAPI:
                         hex_decoded = bytes.fromhex(data['Instruction']['Data'])
                         meta = await self.parse_mint_instruction_data(hex_decoded)
 
-                        mint = data["Instruction"]["Accounts"][4]["Address"]
+                        mint = data["Instruction"]["Accounts"][3]["Address"]
                         signature = data["Transaction"]["Signature"]
 
                         queue_data = (signature, mint, catch_time, meta)
