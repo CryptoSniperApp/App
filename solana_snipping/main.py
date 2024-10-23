@@ -43,6 +43,7 @@ async def solana_strategy():
     reset_cache = time.time()
     logging.getLogger("apscheduler").setLevel(logging.CRITICAL)
     setup_logger()
+    client = AsyncClient("https://api.mainnet-beta.solana.com", "confirmed")
     cfg = get_config()
 
     q = asyncio.Queue()
@@ -54,6 +55,11 @@ async def solana_strategy():
 
     while True:
         signature, mint, dt, meta = await q.get()
+        # signature = "1yq9yJzgSkLPd8jekQiXHvs7wWNgtGPM4XzMnws2BMCV86zxGT49h7HVjcVKaFC4MZzMus61hmVJhrySqFVrdi3"
+        # mint = '581yp3B33wWJmQUPQ75x8ZtkWLQdjS97ZKTAAEYPa2of'
+        # dt = datetime.now()
+        # data = await client.get_transaction(Signature.from_string(signature), encoding="base64", max_supported_transaction_version=0)
+        # meta = await strategy._moonshot_client.parse_mint_instruction_data(data.value.transaction.transaction.message.instructions[1].data)
         
         if time.time() - reset_cache >= 60 * 15:  # if more than 15 minutes have passed
             cache.clear()

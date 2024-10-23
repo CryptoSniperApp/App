@@ -232,7 +232,7 @@ class Moonshot:
             
         if mint_meta:
             mints_images = [m["image"] for m in self._mints_metas]
-            mints_images = [m["name"] for m in self._mints_metas]
+            mints_name = [m["name"] for m in self._mints_metas]
             mints_websites = [w["url"] for m in self._mints_metas for w in m["websites"]]
             mints_socials = [s["url"] for m in self._mints_metas for s in m["socials"]]
             
