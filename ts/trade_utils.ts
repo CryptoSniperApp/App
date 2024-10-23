@@ -22,7 +22,7 @@ export async function getTokenAmountInWallet(
 }
 
 
-class MyAnchorProviderV1 extends BaseAnchorProvider<any> {
+export class MyAnchorProviderV1 extends BaseAnchorProvider<any> {
     constructor(connectionStr: string, confirmOptions: any) {
         super(connectionStr, tokenLaunchpadIdlV1, programId, confirmOptions);
     }
@@ -46,11 +46,9 @@ export async function swapTokens(
     slippageBps: number | null = null,
     microLamports: number | null = null,
     decimals: number | null = null,
-    // commitment: web3.Commitment = 'recent',
     commitment: web3.Commitment = 'confirmed',
-    // commitment: web3.Commitment = 'processed',
-    // commitment: web3.Commitment = 'singleGossip',
     confirmTransaction: boolean = true,
+    confirmBuyOperation: boolean = false
 ): Promise<[string, number]> {
     if (!slippageBps) {
         slippageBps = 500;
@@ -62,7 +60,7 @@ export async function swapTokens(
         decimals = 9;
     }
 
-    let kp = Keypair.fromSecretKey(base58.decode(privateKey));
+    let kp = Keypair.fromSecretKey(base58.decode(privKeyWallet));
     let rpcUrl = connection.rpcEndpoint;
     const moonshot = new Moonshot({
         rpcUrl,
@@ -180,17 +178,19 @@ export async function swapTokens(
     let start = Date.now();
 
     let txHash;
-    if (confirmTransaction) {
+    if (confirmBuyOperation && txType === "BUY") {
         var attempt = 0;
 
         while (attempt < 3) {
             try {
-                
-                let t = new web3.Transaction();
-                t.add(priorityIx, ...ixs);
                 let blockhash = await connection.getLatestBlockhash();
-                t.recentBlockhash = blockhash.blockhash;
-                t.sign(creator);
+                let msg = new web3.TransactionMessage({
+                    payerKey: kp.publicKey,
+                    instructions: [priorityIx, ...ixs],
+                    recentBlockhash: blockhash.blockhash,
+                }).compileToV0Message();
+                let t = new web3.VersionedTransaction(msg);
+                t.sign([creator]);
 
                 txHash = await connection.sendRawTransaction(t.serialize(), {
                     skipPreflight: true,
@@ -217,12 +217,14 @@ export async function swapTokens(
             throw new Error(`error when sending transaction on ${txType}`)
         }
     } else {
-
-        let t = new web3.Transaction();
-        t.add(priorityIx, ...ixs);
         let blockhash = await connection.getLatestBlockhash();
-        t.recentBlockhash = blockhash.blockhash;
-        t.sign(creator);
+        let msg = new web3.TransactionMessage({
+            payerKey: kp.publicKey,
+            instructions: [priorityIx, ...ixs],
+            recentBlockhash: blockhash.blockhash,
+        }).compileToV0Message();
+        let t = new web3.VersionedTransaction(msg);
+        t.sign([creator]);
 
         txHash = await connection.sendRawTransaction(t.serialize(), {
             skipPreflight: true,
@@ -278,12 +280,12 @@ export async function closeTokenAccount(
 ): Promise<string> {
     let tx = new web3.Transaction().add(
         spl.createCloseAccountInstruction(
-          new PublicKey(tokenAccountAddress), // token account which you want to close
-          destinationPublicKey, // destination
-          ownerPublicKey, // owner of token account
+            new PublicKey(tokenAccountAddress), // token account which you want to close
+            destinationPublicKey, // destination
+            ownerPublicKey, // owner of token account
         ),
     );
-    
+
 
     let start = Date.now();
     const signature = await web3.sendAndConfirmTransaction(connection, tx, [
@@ -298,7 +300,7 @@ export async function closeTokenAccount(
 
 export async function getAssociatedTokenAccount(
     mintAddress: string,
-    walletPublicKey: string     
+    walletPublicKey: string
 ): Promise<PublicKey> {
     let ata = await spl.getAssociatedTokenAddress(
         new PublicKey(mintAddress),
@@ -324,17 +326,21 @@ async function sellAll(connection: Connection, kp: Keypair) {
         console.log(`pubkey: ${accountInfo.pubkey.toBase58()}`);
         console.log(`mint: ${accountInfo.account.data["parsed"]["info"]["mint"]}`);
         console.log(
-          `owner: ${accountInfo.account.data["parsed"]["info"]["owner"]}`,
+            `owner: ${accountInfo.account.data["parsed"]["info"]["owner"]}`,
         );
         console.log(
-          `decimals: ${decimals}`,
+            `decimals: ${decimals}`,
         );
         console.log(
-          `amount: ${amount}`,
+            `amount: ${amount}`,
         );
         console.log("====================");
 
-        if (amount != null && `${amount}` !== "0" && amount < 500_000 * (10 ** decimals) ) {
+        att++;
+        if (att > 5) {
+            continue;
+        }
+        if (amount != null && `${amount}` !== "0" && amount < 500_000 * (10 ** decimals)) {
             try {
                 let promise = swapTokens(
                     connection,
@@ -345,19 +351,16 @@ async function sellAll(connection: Connection, kp: Keypair) {
                     500,
                     50_000,
                     9,
-                    'confirmed'
+                    'confirmed',
+                    false
                 )
                 promises.push(promise)
             } catch (error) {
                 console.error(error);
             }
         }
-        if ( `${amount}` !== "0" ) {
+        if (`${amount}` !== "0") {
             continue;
-        }
-        att++;
-        if (att > 5) {
-            return
         }
         // console.log(att);
         let promise = closeTokenAccount(
@@ -460,11 +463,11 @@ async function getPoolByMintRaydium(mint: string): Promise<null | POOL_INFO> {
 
 async function swapMeteoraTokens(
     connection: Connection,
-    poolAddress: PublicKey, 
-    txType: "BUY" | "SELL", 
-    swapAmount: number, 
+    poolAddress: PublicKey,
+    txType: "BUY" | "SELL",
+    swapAmount: number,
     kp: Keypair,
-    slippage: number = 3, 
+    slippage: number = 3,
     maxRetries: number = 50,
     microLamports: number = 200_000,
     commitment: web3.Commitment = 'confirmed',
@@ -473,17 +476,17 @@ async function swapMeteoraTokens(
     const pool = await AmmImpl.create(connection, poolAddress);
     let poolInfo = pool.poolInfo;
 
-    let solMint = pool.tokenAMint.address.toBase58() === NATIVE_MINT.toBase58() 
-    ? pool.tokenAMint 
-    : pool.tokenBMint;
-    let solAmount = solMint === pool.tokenAMint 
-    ? poolInfo.tokenAAmount.toNumber() / (10 ** solMint.decimals) 
-    : poolInfo.tokenBAmount.toNumber() / (10 ** solMint.decimals);
+    let solMint = pool.tokenAMint.address.toBase58() === NATIVE_MINT.toBase58()
+        ? pool.tokenAMint
+        : pool.tokenBMint;
+    let solAmount = solMint === pool.tokenAMint
+        ? poolInfo.tokenAAmount.toNumber() / (10 ** solMint.decimals)
+        : poolInfo.tokenBAmount.toNumber() / (10 ** solMint.decimals);
 
-    let otherMint = solMint === pool.tokenAMint ? pool.tokenBMint : pool.tokenAMint;  
-    let otherAmount = otherMint === pool.tokenAMint 
-    ? poolInfo.tokenAAmount.div(new BN(10).pow(new BN(otherMint.decimals))).toNumber() 
-    : poolInfo.tokenBAmount.div(new BN(10).pow(new BN(otherMint.decimals))).toNumber();
+    let otherMint = solMint === pool.tokenAMint ? pool.tokenBMint : pool.tokenAMint;
+    let otherAmount = otherMint === pool.tokenAMint
+        ? poolInfo.tokenAAmount.div(new BN(10).pow(new BN(otherMint.decimals))).toNumber()
+        : poolInfo.tokenBAmount.div(new BN(10).pow(new BN(otherMint.decimals))).toNumber();
 
     var swapQuote;
     var inTokenMint;
@@ -613,43 +616,44 @@ async function test() {
     mint = '3SqaeJ6bhEQNRod5wJyDYyq6N28Wwz2jcEM5J8H9Rp9q';
     mint = '41upazdWAgLjfCkLGQwGDgj2knovnpPyr4q2ZVNjifLz'
     mint = 'GLeMhfYHSHW12o4UC8b8tb7YriMp6tybpEFBUxjf7okf';
+    mint = '5cpvvSgximPZ6D9TdtNamtA3AMFtjQNHwfhu6E9jo6NP';
 
-    
+
     // let ata = await getAssociatedTokenAccount(mint, kp.publicKey.toBase58());
     // let amount = await getTokenAmountInWallet(connection, ata.toBase58()) as number;
     // console.log(amount);
-    
+
     // let result = await swapTokens(connection, "BUY", mint, privateKey, 100);
     // console.log(result);
-    
+
     // metaplex.nfts().findByMint({ mintAddress: new PublicKey(mint) })
     // let res = await swapTokens(connection, "BUY", mint, privateKey, 10)
     // console.log(res);
-    
+
     // let mint = '696bjiNHJnVf5fubr5e2CbqY1iKG4en3vzhpXaYLK6Fa'; // raydium
 
     // let res = await spl.getTokenMetadata(connection, new PublicKey(mint));
     // console.log(res);
 
-    // // let rpcUrl = process.env.MOONSHOT_RPC_ENDPOINT as string;
-
+    // let rpcUrl = process.env.MOONSHOT_RPC_ENDPOINT as string;
+    // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq';
     // const connection = new Connection(rpcUrl, "confirmed");
 
     // let promises = [];
     // let start = Date.now();
-    // for (let i = 0; i < 10; i++) {
+    // for (let i = 0; i < 5; i++) {
     //     promises.push(swapTokens(
     //         connection,
     //         "BUY",
     //         mint,
     //         privateKey, 
-    //         5,
+    //         15,
     //     ));
     // }
     // await Promise.all(promises);
     // console.log('Main time taken', Date.now() - start);
 
-    // await sellAll(connection, kp);
+    await sellAll(connection, kp);
 }
 
 

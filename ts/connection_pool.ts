@@ -111,8 +111,9 @@ export class ConnectionSolanaPool {
       let axiosObject = axios.create({
           httpsAgent: agent,
       });
-  
-      let connection = new web3.Connection(web3.clusterApiUrl("mainnet-beta"), {
+      
+      let rpc = web3.clusterApiUrl("mainnet-beta");
+      let connection = new web3.Connection(rpc, {
         async fetch(input, init?) {
             // console.log("Fetching: ", input, "init: ", init);
             return await axiosFetchWithRetries(axiosObject, input, init);

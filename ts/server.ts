@@ -8,6 +8,7 @@ import * as dotenv from 'dotenv';
 import * as wallet_utils from './wallet_utils';
 import { web3 } from "@project-serum/anchor";
 import { ConnectionSolanaPool } from "./connection_pool";
+import { MyAnchorProviderV1 } from "./trade_utils";
 
 dotenv.config();
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
@@ -359,6 +360,40 @@ const tokensImpl: pools.TokensSolanaServer = {
         rawData: `error: ${error}. traceback: ${error.stack}`,
         msTimeTaken: ""
       });
+    }
+
+    callback(null, response);
+  },
+  async decodeMoonshotMintInstruction(
+    call: grpc.ServerUnaryCall<pools.DecodeMoonshotMintInstructionData, pools.DecodeMoonshotMintInstructionData>, 
+    callback
+  ): Promise<void> {
+    let response;
+    let start = Date.now();
+    
+    try {
+      let connection = connPool.getConnectionWithProxy();
+      let provider = new MyAnchorProviderV1(connection.rpcEndpoint, {
+          commitment: 'confirmed',
+      });
+      let result = (provider.program.coder.instruction as any).decode(call.request.instructionData);
+      result = result.data.mintParams;
+      if  (result.amount) {
+        result.amount = BigInt(result.amount).toString();
+      }
+      var obj = JSON.stringify(result);
+      response = pools.ResponseRpcOperation.create({
+        success: true,
+        rawData: obj,
+        msTimeTaken: `${Date.now() - start}`
+      })
+
+    } catch (error: any) {
+      response = pools.ResponseRpcOperation.create({
+        success: false,
+        error: `${error}. stack: ${error.stack}`,
+        msTimeTaken: `${Date.now() - start}`
+      })
     }
 
     callback(null, response);

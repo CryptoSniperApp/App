@@ -133,6 +133,11 @@ class ReceiveSolFromWallets(betterproto.Message):
     destination_wallet_public_key: str = betterproto.string_field(2)
 
 
+@dataclass
+class DecodeMoonshotMintInstructionData(betterproto.Message):
+    instruction_data: bytes = betterproto.bytes_field(1)
+
+
 class PoolStateStub(betterproto.ServiceStub):
     async def get_pool_state(
         self, *, pool_data: bytes = b""
@@ -248,6 +253,18 @@ class TokensSolanaStub(betterproto.ServiceStub):
 
         return await self._unary_unary(
             "/TokensSolana/receiveSolFromWallets",
+            request,
+            ResponseRpcOperation,
+        )
+
+    async def decode_moonshot_mint_instruction(
+        self, *, instruction_data: bytes = b""
+    ) -> ResponseRpcOperation:
+        request = DecodeMoonshotMintInstructionData()
+        request.instruction_data = instruction_data
+
+        return await self._unary_unary(
+            "/TokensSolana/decodeMoonshotMintInstruction",
             request,
             ResponseRpcOperation,
         )

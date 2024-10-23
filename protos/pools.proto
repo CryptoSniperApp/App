@@ -117,6 +117,11 @@ message ReceiveSolFromWallets {
     string destination_wallet_public_key = 2;
 }
 
+message DecodeMoonshotMintInstructionData {
+    bytes instruction_data = 1;
+}
+
+
 service PoolState {
     rpc getPoolState(RequestPoolState) returns (ResponsePoolStateOperation);
 }
@@ -128,5 +133,6 @@ service TokensSolana {
     rpc getAssociatedTokenAccount(GetAssociatedTokenAccount) returns (ResponseGetAssociatedTokenAccount);
     rpc transferSolToWallets(TransferSolToWallets) returns (ResponseRpcOperation);
     rpc receiveSolFromWallets(ReceiveSolFromWallets) returns (ResponseRpcOperation);
+    rpc decodeMoonshotMintInstruction(DecodeMoonshotMintInstructionData) returns (ResponseRpcOperation);
 }
 

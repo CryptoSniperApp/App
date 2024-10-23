@@ -7,14 +7,19 @@ import traceback
 from grpclib.client import Channel
 from loguru import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from solana.rpc.async_api import AsyncClient
 from solders.pubkey import Pubkey
+import pickle
+from solders.signature import Signature
 
 from solana_snipping.backend.db import setup
+from solana_snipping.backend.solana.moonshot_api import MintToken
 from solana_snipping.backend.solana.strategies import Moonshot
 from solana_snipping.common.config import get_config
 from solana_snipping.common.constants import SOLANA_TOKEN_PROGRAM_ID
 from solana_snipping.frontend.telegram.alerting import log_in_chat
-from solana_snipping.backend.proto_generated.pools import TokensSolanaStub
+from solana_snipping.backend.proto_generated.pools import ResponseRpcOperation, TokensSolanaStub
 
 
 MAIN_SCHEDULER = AsyncIOScheduler()
@@ -38,15 +43,17 @@ async def solana_strategy():
     reset_cache = time.time()
     logging.getLogger("apscheduler").setLevel(logging.CRITICAL)
     setup_logger()
+    cfg = get_config()
 
     q = asyncio.Queue()
     
     strategy = Moonshot()
     strategy.subscribe_to_moonshot_mints_create(queue=q)
     MAIN_SCHEDULER.add_job(strategy.sell_all_tokens, "interval", seconds=60 * 5, max_instances=1)
+    # MAIN_SCHEDULER.add_job(save_cache, IntervalTrigger(seconds=40), max_instances=1)
 
     while True:
-        signature, mint, dt = await q.get()
+        signature, mint, dt, meta = await q.get()
         
         if time.time() - reset_cache >= 60 * 15:  # if more than 15 minutes have passed
             cache.clear()
@@ -56,10 +63,27 @@ async def solana_strategy():
             continue
 
         cache.append(mint)
-        logger.info(f"{signature} - {mint} - {dt}")
+        msg = (
+            f"\nПоймали минт событие\nСигнатура: {signature}\n"
+            f"Минт адрес: {mint}\nПолучили ивент от bitquery: {dt}"
+        )
+        logger.info(msg)
+        
+        if isinstance(meta, ResponseRpcOperation):
+            msg = (
+                "Не смогли распарсить метаданные нового токена.\n"
+                f"Стек:\n{meta.error}\nms: {meta.ms_time_taken}, raw: "
+                f"'{meta.raw_data}'"
+            )
+            logger.warning(msg)
+            logger.error(msg)
+            meta = {}
+        else:
+            meta: MintToken
+            meta = meta.token.model_dump()
 
         try:
-            strategy.handle_transaction(signature, dt, mint)
+            strategy.handle_transaction(signature, dt, mint, mint_meta=meta)
         except Exception as e:
             logger.exception(e)
 
