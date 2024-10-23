@@ -11,6 +11,7 @@ import { swapTokensOnJupiter } from "./jupiter_dex";
 import { ResponseError } from "@jup-ag/api";
 import { ConnectionSolanaPool } from "./connection_pool";
 import { withTimeout } from "./main";
+import * as anchor from "@coral-xyz/anchor";
 
 
 export async function getTokenAmountInWallet(
@@ -33,6 +34,7 @@ export class MyAnchorProviderV1 extends BaseAnchorProvider<any> {
     setConnection(connection: Connection) {
         (this as any)._connection = connection;
         (this as any).setProvider();
+        (this as any)._program = new anchor.Program(this.IDL, this.PROGRAM_ID, {connection: connection });
     }
 }
 
@@ -48,13 +50,13 @@ export async function swapTokens(
     decimals: number | null = null,
     commitment: web3.Commitment = 'confirmed',
     confirmTransaction: boolean = true,
-    confirmBuyOperation: boolean = false
+    confirmBuyOperation: boolean = true
 ): Promise<[string, number]> {
     if (!slippageBps) {
         slippageBps = 500;
     }
     if (!microLamports) {
-        microLamports = 200_000;
+        microLamports = 600_000;
     }
     if (!decimals) {
         decimals = 9;
@@ -85,7 +87,8 @@ export async function swapTokens(
             for (let i = 0; i < 15; i++) {
                 try {
                     curvePos = await token.getCurvePosition();
-                } catch  { 
+                } catch (error: any)  { 
+                    console.log(`${error}. ${error.stack}`)
                     await new Promise(res => setTimeout(res, 1500));
                 }
             }
@@ -652,21 +655,29 @@ async function test() {
     // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq';
     // const connection = new Connection(rpcUrl, "confirmed");
 
-    // let promises = [];
-    // let start = Date.now();
-    // for (let i = 0; i < 5; i++) {
-    //     promises.push(swapTokens(
-    //         connection,
-    //         "BUY",
-    //         mint,
-    //         privateKey, 
-    //         15,
-    //     ));
-    // }
-    // await Promise.all(promises);
-    // console.log('Main time taken', Date.now() - start);
+    let promises = [];
+    console.log('started')
+    let start = Date.now();
+    for (let i = 0; i < 10; i++) {
+        promises.push(swapTokens(
+            connection,
+            "BUY",
+            mint,
+            privateKey, 
+            15,
+        ));
+    }
+    await Promise.all(promises);
+    console.log('Main time taken', Date.now() - start);
 
-    await sellAll(connection, kp);
+    // await swapTokens(
+    //     connection,
+    //     "BUY",
+    //     mint,
+    //     privateKey, 
+    //     15,
+    // )
+    // await sellAll(connection, kp);
 }
 
 
