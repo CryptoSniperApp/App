@@ -661,6 +661,8 @@ class Moonshot:
             init_msg = f"[ПРОДАЕМ ВСЕ ТОКЕНЫ ТАК КАК КРЕАТОР КУПИЛ {creator_buy_amount}]"
             try:
                 creator_buy_amount = await self.get_creator_buy_amount(signature_transaction)
+                if not creator_buy_amount:
+                    break
                 if creator_buy_amount >= 201_000_000:
                     need_to_sell = True
                     await self._sell_all_tokens(
@@ -1061,6 +1063,8 @@ async def main():
     # print("start ", mint)
     
     # m._setup_grpc_stub()
+    await asyncio.gather(*[m.proxy_sol_client.get_latest_blockhash() for _ in range(5)])
+    return
     print(
         await m.get_creator_buy_amount(
             "2XsTbqgH1ytJxkqsYQkw9c5BZJXqeGdh3NpXj2tYi5h1NY4GWxQMwimYg4kCBjqJMm8Ai1wbtJEHak3urxfEsRqm"

@@ -33,7 +33,12 @@ async def mock_async_task():
 
 def setup_logger():
     def log_tg_filter(record):
-        return record["level"].name not in ["EXCEPTION", "CRITICAL", "ERROR", "DEBUG"]
+        return record["level"].name not in [
+            # "EXCEPTION",
+            # "CRITICAL", 
+            # "ERROR", 
+            "DEBUG"
+        ]
 
     logger.add(log_in_chat, filter=log_tg_filter)
 

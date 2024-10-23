@@ -34,7 +34,7 @@ async def log_in_chat(message: str):
             await bot.send_message(
                 cfg["microservices"]["moonshot"]["logger_chat_id"],
                 message,
-                parse_mode="Markdown",
+                # parse_mode="Markdown",
             )
         except Exception:
             await bot.send_message(

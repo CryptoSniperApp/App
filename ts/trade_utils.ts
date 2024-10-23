@@ -354,10 +354,10 @@ async function sellAll(connection: Connection, kp: Keypair) {
         console.log("====================");
 
         att++;
-        if (att > 5) {
+        if (att > 15) {
             continue;
         }
-        if (amount != null && `${amount}` !== "0" && amount < 500_000 * (10 ** decimals)) {
+        if (amount != null && `${amount}` !== "0" && amount < 50_000 * (10 ** decimals)) {
             try {
                 let promise = swapTokens(
                     connection,
@@ -674,13 +674,13 @@ async function test() {
     // await Promise.all(promises);
     // console.log('Main time taken', Date.now() - start);
 
-    await swapTokens(
-        connection,
-        "BUY",
-        mint,
-        privateKey, 
-        15,
-    )
+    // await swapTokens(
+    //     connection,
+    //     "BUY",
+    //     mint,
+    //     privateKey, 
+    //     15,
+    // )
     // await sellAll(connection, kp);
 }
 
