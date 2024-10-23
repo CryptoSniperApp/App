@@ -655,20 +655,20 @@ async function test() {
     // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq';
     // const connection = new Connection(rpcUrl, "confirmed");
 
-    let promises = [];
-    console.log('started')
-    let start = Date.now();
-    for (let i = 0; i < 10; i++) {
-        promises.push(swapTokens(
-            connection,
-            "BUY",
-            mint,
-            privateKey, 
-            15,
-        ));
-    }
-    await Promise.all(promises);
-    console.log('Main time taken', Date.now() - start);
+    // let promises = [];
+    // console.log('started')
+    // let start = Date.now();
+    // for (let i = 0; i < 10; i++) {
+    //     promises.push(swapTokens(
+    //         connection,
+    //         "BUY",
+    //         mint,
+    //         privateKey, 
+    //         15,
+    //     ));
+    // }
+    // await Promise.all(promises);
+    // console.log('Main time taken', Date.now() - start);
 
     // await swapTokens(
     //     connection,
