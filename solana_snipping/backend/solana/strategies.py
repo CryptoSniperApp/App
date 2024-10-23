@@ -1003,7 +1003,15 @@ async def main():
     # m.subscribe_to_moonshot_mints_create(queue=q)
     # m._moonshot_client._mints_price_watch.append(mint)
     # m.handle_transaction(mint=mint, transaction_received=datetime.now(), signature="")
-    
+    buy_tx_signature, ms_time_taken, success, error = await m._swap_tokens(
+                swap_type="BUY",
+                mint="  ",
+                private_wallet_key=m._private_wallet_key,
+                amount=buy_amount,
+                slippage=3500,
+                decimal=decimals or None,
+                microlamports=5_000_000
+            )
     await asyncio.sleep(10000)
     
     # secret_keys = [

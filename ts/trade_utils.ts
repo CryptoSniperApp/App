@@ -79,9 +79,22 @@ export async function swapTokens(
     }
 
     const token = moonshot.Token({ mintAddress: mintAddress });
-    let curvePos;
+    let curvePos = null;
     try {
-        curvePos = await token.getCurvePosition();
+        if (txType === "BUY") {
+            for (let i = 0; i < 15; i++) {
+                try {
+                    curvePos = await token.getCurvePosition();
+                } catch  { 
+                    await new Promise(res => setTimeout(res, 1500));
+                }
+            }
+        }
+        
+        if (!curvePos) {
+            curvePos = await token.getCurvePosition();
+        }
+
         console.log('Current position of the curve: ', curvePos);
     } catch (error) {
         console.log('Error getting curve position: ', error);
