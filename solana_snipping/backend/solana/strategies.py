@@ -352,12 +352,9 @@ class Moonshot:
     async def sell_all_tokens(self, close_token_account: bool = True):
         cfg = get_config()
         if self._grpc_conn is None:
-            grpc_cfg = cfg["microservices"]["grpc"]
-            ch = Channel(grpc_cfg["host"], grpc_cfg["port"])
-            conn_grpc = TokensSolanaStub(ch)
-        else:
-            conn_grpc = self._grpc_conn
-            
+            self._setup_grpc_stub()
+        
+        conn_grpc = self._grpc_conn    
         rpc_endpoint = cfg["microservices"]["moonshot"]["rpc_endpoint"]
         connection = AsyncClient(rpc_endpoint, commitment="finalized")
         
@@ -472,7 +469,7 @@ class Moonshot:
             )
             
             resp = await client.get_transaction(
-                signature, encoding="jsonParsed"
+                signature, encoding="jsonParsed", max_supported_transaction_version=0
             )
             if not resp.value:
                 raise ValueError(f"transaction not found: {sig}")
