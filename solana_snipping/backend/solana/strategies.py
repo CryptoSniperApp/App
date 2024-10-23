@@ -10,8 +10,6 @@ import base58
 import httpx
 from loguru import logger
 import orjson
-from solana.rpc.api import Client
-from solana.rpc.async_api import AsyncClient
 from solana.rpc.core import RPCException
 from solders.pubkey import Pubkey
 from typing import Literal
@@ -339,10 +337,7 @@ class Moonshot:
             return False
         
         endpoint = get_config()["microservices"]["moonshot"]["rpc_endpoint"]
-        client = AsyncClient(
-            endpoint,
-            commitment="finalized"
-        )
+        client = self.proxy_sol_client
         
         resp: GetTransactionResp = await client.get_transaction(
             Signature.from_string(signature), commitment="finalized",
@@ -359,8 +354,7 @@ class Moonshot:
             self._setup_grpc_stub()
         
         conn_grpc = self._grpc_conn    
-        rpc_endpoint = cfg["microservices"]["moonshot"]["rpc_endpoint"]
-        connection = AsyncClient(rpc_endpoint, commitment="finalized")
+        connection = self.proxy_sol_client
         
         private_key = cfg["microservices"]["moonshot"]["private_key"]
         kp = Keypair.from_base58_string(private_key)
@@ -370,6 +364,7 @@ class Moonshot:
                 TokenAccountOpts(
                     program_id=Pubkey.from_string(SOLANA_TOKEN_PROGRAM_ID)
                 ),
+                commitment="finalized"
             )
             for val in accounts.value:
                 account = val.account
@@ -393,10 +388,7 @@ class Moonshot:
                     
     async def _get_error_transaction(self, signature: str) -> str:
         endpoint = get_config()["microservices"]["moonshot"]["rpc_endpoint"]
-        client = AsyncClient(
-            endpoint,
-            commitment="finalized"
-        )
+        client = self.proxy_sol_client
         
         resp: GetTransactionResp = await client.get_transaction(
             Signature.from_string(signature), 
@@ -434,7 +426,7 @@ class Moonshot:
         return True, error
     
     async def is_mint_in_wallet(self, mint: str, needed_balance: int = None):
-        client = AsyncClient("https://api.mainnet-beta.solana.com")
+        client = self.proxy_sol_client
         try:
             keypair = Keypair.from_base58_string(self._private_wallet_key)
             ata = await self._grpc_conn.get_associated_token_account(
@@ -978,6 +970,7 @@ class Moonshot:
                             init_msg = "[ВЫВОДИМ ТЕЛО]"
                             failed = 0
                             while True:
+                                swap_time = datetime.now()
                                 # продаем вложенные доллары
                                 # amount_to_sell_first_part_tokens = buy_amount_usd / price_usd
                                 amount_to_sell_first_part_tokens = buy_amount_sol / price_sol

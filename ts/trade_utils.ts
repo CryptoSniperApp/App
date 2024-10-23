@@ -166,15 +166,30 @@ export async function swapTokens(
     const creator = Keypair.fromSecretKey(base58.decode(privKeyWallet));
     const tokenAmount = BigInt(Math.round(amount * (10 ** decimals)));
     
-    const collateralAmount = await token.getCollateralAmountByTokens({
-        tokenAmount,
-        tradeDirection: txType,
-        curvePosition: curvePos
-    });
+    var collateralAmount = null;
+    var errorCollateralAmount;
+    for (let i = 0; i < 10; i++) {
+        try {
+            collateralAmount = await token.getCollateralAmountByTokens({
+                tokenAmount,
+                tradeDirection: txType,
+                curvePosition: curvePos
+            });
+            break;
+        } catch (error: any) {
+            console.error(`error: ${error}. stack: ${error.stack}`)
+            errorCollateralAmount = error;
+            await new Promise(res => setTimeout(res, 800));
+        }   
+    }
+
+    if (collateralAmount === null) {
+        throw errorCollateralAmount;
+    }
 
     let fixedSide: FixedSide;
     if (txType == "BUY") {
-        fixedSide = FixedSide.OUT;
+        fixedSide = FixedSide.OUT;  
     } else {
         fixedSide = FixedSide.IN;
     }
