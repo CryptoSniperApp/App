@@ -47,7 +47,7 @@ async def solana_strategy():
     cache = []
     reset_cache = time.time()
     logging.getLogger("apscheduler").setLevel(logging.CRITICAL)
-    setup_logger()
+    # setup_logger()
     client = AsyncClient("https://api.mainnet-beta.solana.com", "confirmed")
     cfg = get_config()
 

@@ -616,98 +616,13 @@ class Moonshot:
         buy_amount = 10_000 # сколько токенов покупаем
         start_function_time = time.time()
         
-        buy_tx_signature, ms_time_taken, success, error = await self._swap_tokens(
-            swap_type="BUY",
-            mint=mint,
-            private_wallet_key=self._private_wallet_key,
-            amount=buy_amount,
-            slippage=3500,
-            decimal=decimals or None,
-            microlamports=5_000_000
-        )
-        
-        in_wallet = False
-        await asyncio.sleep(10)
-        for _ in range(5):
-            in_wallet = await self.is_mint_in_wallet(
-                mint=mint,
-                needed_balance=buy_amount
-            )
-            
-            if not in_wallet:
-                await asyncio.sleep(5)
-            else:
-                break
-        
-        if not in_wallet:
-            msg = (
-                f"\nНе получилось купить токен.\nТранзакция: {buy_tx_signature}\n"
-                f"Метаданные токена: {mint_meta}\n"
-                f"Пробовали купить {buy_amount} токенов "
-                f"{mint} несколько раз. ошибка: {error}. Не получилось. Выходим из функции"
-            )
-            logger.warning(msg)
-            logger.error(msg)
-            return
-        
-        need_to_sell = False
-        creator_buy_amount = None
-        for _ in range(3):
-            init_msg = f"[ПРОДАЕМ ВСЕ ТОКЕНЫ ТАК КАК КРЕАТОР КУПИЛ {creator_buy_amount}]"
-            try:
-                creator_buy_amount = await self.get_creator_buy_amount(signature_transaction)
-                if not creator_buy_amount:
-                    break
-                if creator_buy_amount >= 201_000_000:
-                    need_to_sell = True
-                    await self._sell_all_tokens(
-                        init_msg,
-                        mint=mint, 
-                        microlamports=600_000,
-                    )
-                    return
-                else:
-                    break
-            except Exception as e:
-                logger.exception(e)
-                logger.warning(
-                    f"{init_msg} Ошибка: {e}, stack:\n{traceback.format_exc()}"
-                )
-        
-        if need_to_sell:
-            return
-        
-        buy_amount_sol = None
-        for _ in range(5):
-            buy_amount_sol = await self.extract_sol_amount_from_buy_transaction(buy_tx_signature)
-            if buy_amount_sol is None:
-                await asyncio.sleep(3)
-                continue
-            break
-        
-        if buy_amount_sol is None:
-            await self._sell_all_tokens(
-                init_msg=f"[НЕ УДАЛОСЬ ПОЛУЧИТЬ ЗНАЧЕНИЕ В SOL НАШЕЙ ПОКУПКИ]",
-                mint=mint
-            )
-            return
-
         end_function_time = time.time() 
         capture_time = datetime.now()
         message = (
             f"ТИП - MOONSHOT DEXSCREENER\n"
             f"Адрес токена - *{mint}*\n\n"
-            f"Поймали транзакцию в _{transaction_received}_, купили монету в _{capture_time}_.\n\n"
-            f"Купили {buy_amount} единиц токена\n"
-            f"Сумма в SOL: {buy_amount_sol}\n"
-            f"Время самой транзакции - {ms_time_taken} ms\n"
-            f"[DEBUG] Время выполнения функции вместе с транзакцией - {end_function_time - start_function_time} s\n"
-            f"Результат - {buy_tx_signature}"
+            f"Поймали транзакцию в _{transaction_received}_, купили монету в _{capture_time}_."
         )
-        try:
-            await send_msg_log(message, mint, trans=signature_transaction)
-        except Exception as e:
-            logger.exception(e)
         logger.info(message)
         self._moonshot_client._mints_price_watch_queues.append(queue)
 
@@ -727,49 +642,6 @@ class Moonshot:
         price_updated_at = time.time()
         
         dbsession = create_async_sessiomaker()
-        
-        async def sell_all_tokens():
-            nonlocal exit_from_monitor
-            
-            if time.time() - price_updated_at < max_time_for_sell_tokens:
-                return
-            
-            init_msg = f"[НЕТ ТРАНЗАКЦИЙ ЗА ПОСЛЕДНИЕ {max_time_for_sell_tokens} СЕКУНД]"
-            logger.info(f"{init_msg}. С момента первой покупки прошло {int(time.time() - start_function_time)} секунд ({mint}). Продаем все")
-            
-            result = await self._sell_all_tokens(
-                init_msg=init_msg,
-                mint=mint,
-                amount=0
-            )
-            success, error = result["success"], result["error"]
-            
-            if not success:
-                if error.count("to be already initialized"):
-                    exit_from_monitor = True
-                    scheduler.remove_job(job.id)
-                else:
-                    logger.warning(f"{init_msg} Получили ошибку после попытки продать все токены. {error}. tx_signature - {result["tx_signature"]}. mint - {mint}")    
-                return
-            
-            exit_from_monitor = True
-            scheduler.remove_job(job.id)
-            logger.success(
-                f"{init_msg} Успешно продали токены из за отсутствия роста цены - {buy_tx_signature} "
-                f"время выполнения - {result["ms_time_taken"]} ms, "
-                f"сигнатура - {result["tx_signature"]}. mint - {mint}"
-            )
-            
-        scheduler = AsyncIOScheduler()
-        
-        job = scheduler.add_job(
-            sell_all_tokens, 
-            IntervalTrigger(
-                seconds=interval_seconds_for_check_price,       
-            ),
-            max_instances=1
-        )
-        scheduler.start()
 
         try:
             session = dbsession()
@@ -829,65 +701,65 @@ class Moonshot:
                             meta=orjson.dumps(mint_meta).decode('utf-8')
                         )
                             
-                        # если текущая цена ниже максимальной цены                            
-                        if price_updated_at - capture_time.timestamp() < 40 and price_sol < max_price_sol:
-                            # вычисляем разницу в процентах относительно максимальной цены и текущей цены
-                            diff = (price_sol - max_price_sol) / max_price_sol * 100
-                            # если цена упала более чем на 50%
-                            if (diff * -1) > max_diff_percents_of_drop_price:
-                                init_msg = f"[ЦЕНА УПАЛА НА {round((diff * -1), 2)} ПРОЦЕНТОВ]"
-                                msg = (
-                                    f"{init_msg}\n"
-                                    "Сработал 2 триггер на продажу всех "
-                                    "токенов. С момента покупки прошло "
-                                    f"{round(time.time() - capture_time.timestamp(), 2)} секунд.\n"
-                                    f"Максимальная цена SOL - {max_price_sol}\n"
-                                    f"Текущая цена SOL - {price_sol}\n"
-                                    f"Попытка №{sell_all_failed} продать все токены (максимум 5)"
-                                )
-                                logger.info(msg)
-                                result = await self._sell_all_tokens(
-                                    init_msg=init_msg,
-                                    mint=mint,
-                                    amount=0
-                                )
-                                success, error = result["success"], result["error"]
-                                if not success:
-                                    if error.count("to be already initialized"):
-                                        exit_from_monitor = True
-                                        logger.warning(f"{init_msg}. Ошибка продажи токенов с несуществующего токен аккаунта. raw error: {error}")
-                                        return
-                                    if sell_all_failed >= 5:
-                                        return
-                                    sell_all_failed += 1
-                                    logger.warning(f"{init_msg}. не удалось продать все токены по 2 триггеру. ошибка {error}. сигнатура -  {result["tx_signature"]}")
-                                    continue
-                                succ_msg = (
-                                    f"{init_msg}. Успешно продали все токены по 2 триггеру.\n"
-                                    f"Макс цена в sol - {max_price_sol}\n"
-                                    f"Текущая цена в sol - {price_sol}\n"
-                                    f"Попытка продать все токены - {sell_all_failed}"
-                                )
+                        # # если текущая цена ниже максимальной цены                            
+                        # if price_updated_at - capture_time.timestamp() < 40 and price_sol < max_price_sol:
+                        #     # вычисляем разницу в процентах относительно максимальной цены и текущей цены
+                        #     diff = (price_sol - max_price_sol) / max_price_sol * 100
+                        #     # если цена упала более чем на 50%
+                        #     if (diff * -1) > max_diff_percents_of_drop_price:
+                        #         init_msg = f"[ЦЕНА УПАЛА НА {round((diff * -1), 2)} ПРОЦЕНТОВ]"
+                        #         msg = (
+                        #             f"{init_msg}\n"
+                        #             "Сработал 2 триггер на продажу всех "
+                        #             "токенов. С момента покупки прошло "
+                        #             f"{round(time.time() - capture_time.timestamp(), 2)} секунд.\n"
+                        #             f"Максимальная цена SOL - {max_price_sol}\n"
+                        #             f"Текущая цена SOL - {price_sol}\n"
+                        #             f"Попытка №{sell_all_failed} продать все токены (максимум 5)"
+                        #         )
+                        #         logger.info(msg)
+                        #         result = await self._sell_all_tokens(
+                        #             init_msg=init_msg,
+                        #             mint=mint,
+                        #             amount=0
+                        #         )
+                        #         success, error = result["success"], result["error"]
+                        #         if not success:
+                        #             if error.count("to be already initialized"):
+                        #                 exit_from_monitor = True
+                        #                 logger.warning(f"{init_msg}. Ошибка продажи токенов с несуществующего токен аккаунта. raw error: {error}")
+                        #                 return
+                        #             if sell_all_failed >= 5:
+                        #                 return
+                        #             sell_all_failed += 1
+                        #             logger.warning(f"{init_msg}. не удалось продать все токены по 2 триггеру. ошибка {error}. сигнатура -  {result["tx_signature"]}")
+                        #             continue
+                        #         succ_msg = (
+                        #             f"{init_msg}. Успешно продали все токены по 2 триггеру.\n"
+                        #             f"Макс цена в sol - {max_price_sol}\n"
+                        #             f"Текущая цена в sol - {price_sol}\n"
+                        #             f"Попытка продать все токены - {sell_all_failed}"
+                        #         )
                                 
-                                try:
-                                    swap_time = datetime.now()
-                                    swap_price = await self.extract_sol_amount_from_buy_transaction(sig=result["tx_signature"])
-                                    if swap_price:
-                                        data = AnalyticData(
-                                            time=time.time(),
-                                            mint1_addr=mint,
-                                            capture_time=capture_time.timestamp(),
-                                            swap_price=swap_price,
-                                            swap_time=swap_time.timestamp(),
-                                            percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100,
-                                            meta=orjson.dumps(mint_meta).decode('utf-8')
-                                        )
-                                except Exception as e:
-                                    logger.exception(e)
+                        #         try:
+                        #             swap_time = datetime.now()
+                        #             swap_price = await self.extract_sol_amount_from_buy_transaction(sig=result["tx_signature"])
+                        #             if swap_price:
+                        #                 data = AnalyticData(
+                        #                     time=time.time(),
+                        #                     mint1_addr=mint,
+                        #                     capture_time=capture_time.timestamp(),
+                        #                     swap_price=swap_price,
+                        #                     swap_time=swap_time.timestamp(),
+                        #                     percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100,
+                        #                     meta=orjson.dumps(mint_meta).decode('utf-8')
+                        #                 )
+                        #         except Exception as e:
+                        #             logger.exception(e)
                                 
-                                data.comment = init_msg
-                                logger.success(succ_msg)
-                                return
+                        #         data.comment = init_msg
+                        #         logger.success(succ_msg)
+                        #         return
                         
                         await repo.add_analytic(data)
 
@@ -897,140 +769,6 @@ class Moonshot:
                             f"{max_price_sol}.\nPercentage diff: "
                             f"{percentage_diff}.\nMint - {mint}"
                         )
-
-                        if sell_body and percentage_diff >= percents_diff_for_sell:
-                            # продаем оставшиеся токены
-                            init_msg = "[ВЫВОДИМ ОСТАТОК]"
-                            while True:
-                                swap_time = datetime.now()
-                                tx_signature, ms_time_taken, success, error = await self._swap_tokens(
-                                    swap_type="SELL",
-                                    mint=mint,
-                                    private_wallet_key=self._private_wallet_key,
-                                    slippage=3500,
-                                    decimal=decimals or None,
-                                    amount=int((buy_amount - amount_to_sell_first_part_tokens) - 5),
-                                    microlamports=1_000_000
-                                )
-                                if not success:
-                                    logger.info(
-                                        f"{init_msg} Не удалось продать оставшиеся токены. "
-                                        f"Сигнатура транзакции - \"{tx_signature}\", "
-                                        f"время выполнения - \"{ms_time_taken}\" ms. Неудачных попыток - {sell_all_failed}"
-                                    )
-                                    sell_all_failed += 1
-                                    if sell_all_failed >= 5:
-                                        logger.info(f"{init_msg} Не удалось продать оставшиеся токены {mint}. Выходим из функции")
-                                        return
-                                    await asyncio.sleep(5)
-                                    continue
-                                
-                                await asyncio.sleep(10)
-                                failed = 0
-                                retry = False
-                                while True:
-                                    is_finalized = await self.transaction_finalized(tx_signature)
-                                    if is_finalized:
-                                        break
-                                    else:
-                                        if failed >= 15:
-                                            logger.info(f"{init_msg} Не удалось получить подтверждение для продажи оставшиейся части токенов {mint}")
-                                            retry = True
-                                            break
-                                        
-                                        failed += 1
-                                        await asyncio.sleep(5)
-                                
-                                if retry:
-                                    continue
-                                
-                                logger.success(f"{init_msg} Мы успешно вывели все оставшиеся токены {mint}.")
-                                
-                                try:
-                                    swap_price = await self.extract_sol_amount_from_buy_transaction(sig=tx_signature)
-                                    if swap_price:
-                                        data = AnalyticData(
-                                            time=time.time(),
-                                            mint1_addr=mint,
-                                            capture_time=capture_time.timestamp(),
-                                            swap_price=swap_price,
-                                            swap_time=swap_time.timestamp(),
-                                            percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100,
-                                            meta=orjson.dumps(mint_meta).decode('utf-8')
-                                        )
-                                except Exception as e:
-                                    logger.exception(e)
-                                
-                                data.comment = init_msg
-                                await repo.add_analytic(data)
-                                return
-                            
-                        elif not sell_body and percentage_diff >= percents_diff_for_sell_body:
-                            # проверяем покупку
-                            init_msg = "[ВЫВОДИМ ТЕЛО]"
-                            failed = 0
-                            while True:
-                                swap_time = datetime.now()
-                                # продаем вложенные доллары
-                                # amount_to_sell_first_part_tokens = buy_amount_usd / price_usd
-                                amount_to_sell_first_part_tokens = buy_amount_sol / price_sol
-                                tx_signature, ms_time_taken, success, error = await self._swap_tokens(
-                                    swap_type="SELL",
-                                    mint=mint,
-                                    private_wallet_key=self._private_wallet_key,
-                                    slippage=3500,
-                                    decimal=decimals or None,
-                                    amount=amount_to_sell_first_part_tokens,
-                                    microlamports=1_000_000,
-                                )
-                                if not failed:
-                                    await asyncio.sleep(10)
-                                if success:
-                                    while True:
-                                        is_finalized = await self.transaction_finalized(tx_signature)
-                                        if is_finalized:
-                                            break
-                                        else:
-                                            if failed > 10:
-                                                logger.info(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
-                                                return
-                                            await asyncio.sleep(5)
-                                            failed += 1
-                                    
-                                    sell_body = True
-                                    logger.success(f"{init_msg} We are sell body for mint - {mint}")
-                                    
-                                    try:
-                                        swap_price = await self.extract_sol_amount_from_buy_transaction(sig=tx_signature)
-                                        if swap_price:
-                                            data = AnalyticData(
-                                                time=time.time(),
-                                                mint1_addr=mint,
-                                                capture_time=capture_time.timestamp(),
-                                                swap_price=swap_price,
-                                                swap_time=swap_time.timestamp(),
-                                                percentage_difference=(swap_price - buy_amount_sol) / buy_amount_sol * 100,
-                                                meta=orjson.dumps(mint_meta).decode('utf-8')
-                                            )
-                                    except Exception as e:
-                                        logger.exception(e)
-                                    
-                                    data.comment = init_msg
-                                    await repo.add_analytic(data)
-                                    break
-                                else:
-                                    failed += 1
-                                    if failed >= 3:
-                                        logger.info(f"{init_msg} Не удалось получить подтверждение для вывода тела {mint}. Выходим из функции")
-                                        return
-                            
-                        elif percentage_diff < 0 and (percentage_diff * -1) >= min_percents:
-                            # We are leave from market with token :-(
-                            logger.warning(
-                                "We leave from monitor because percentage"
-                                f" difference: {percentage_diff}"
-                            )
-                            return
 
                     except Exception as e:
                         logger.exception(e)
@@ -1045,7 +783,6 @@ class Moonshot:
                 self._mints_metas.remove(mint_meta)
             except Exception:
                 pass
-            scheduler.shutdown(wait=False)
 
     def subscribe_to_moonshot_mints_create(self, queue: asyncio.Queue):
         loop = asyncio.get_running_loop()
