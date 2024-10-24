@@ -34,9 +34,9 @@ async def mock_async_task():
 def setup_logger():
     def log_tg_filter(record):
         return record["level"].name not in [
-            # "EXCEPTION",
-            # "CRITICAL", 
-            # "ERROR", 
+            "EXCEPTION",
+            "CRITICAL", 
+            "ERROR", 
             "DEBUG"
         ]
 
