@@ -11,6 +11,9 @@ services:
     volumes:
       - .:/app
 
+    env_file:
+      - .env
+
     depends_on:
       raydium_microservice:
         condition: service_healthy
