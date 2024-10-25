@@ -840,33 +840,33 @@ class Moonshot:
             #     logger.error(msg)
             #     return
             
-            # need_to_sell = False
-            # creator_buy_amount = None
-            # for _ in range(3):
-            #     init_msg = f"[ПРОДАЕМ ВСЕ ТОКЕНЫ ТАК КАК КРЕАТОР КУПИЛ {creator_buy_amount}]"
-            #     try:
-            #         creator_buy_amount = await self.get_creator_buy_amount(signature_transaction)
-            #         if not creator_buy_amount:
-            #             break
-            #         if creator_buy_amount >= 201_000_000:
-            #             need_to_sell = True
-            #             await self._sell_all_tokens(
-            #                 init_msg,
-            #                 mint=mint, 
-            #                 microlamports=180_000,
-            #                 private_wallet_key=private_wallet_key
-            #             )
-            #             return
-            #         else:
-            #             break
-            #     except Exception as e:
-            #         logger.exception(e)
-            #         logger.warning(
-            #             f"{init_msg} Ошибка: {e}, stack:\n{traceback.format_exc()}"
-            #         )
+            need_to_sell = False
+            creator_buy_amount = None
+            for _ in range(3):
+                init_msg = f"[ПРОДАЕМ ВСЕ ТОКЕНЫ ТАК КАК КРЕАТОР КУПИЛ {creator_buy_amount}]"
+                try:
+                    creator_buy_amount = await self.get_creator_buy_amount(signature_transaction)
+                    if not creator_buy_amount:
+                        break
+                    if creator_buy_amount >= 201_000_000:
+                        need_to_sell = True
+                        # await self._sell_all_tokens(
+                        #     init_msg,
+                        #     mint=mint, 
+                        #     microlamports=180_000,
+                        #     private_wallet_key=private_wallet_key
+                        # )
+                        return
+                    else:
+                        break
+                except Exception as e:
+                    logger.exception(e)
+                    logger.warning(
+                        f"{init_msg} Ошибка: {e}, stack:\n{traceback.format_exc()}"
+                    )
             
-            # if need_to_sell:
-            #     return
+            if need_to_sell:
+                return
             
             # buy_tx_signature = None
             # for tx in buy_tx_signatures:

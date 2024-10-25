@@ -23,7 +23,9 @@ class ReadableAnalytic:
             token_data = [r for r in self.data if r["mint1_addr"] == token]
             
             mint_time = token_data[0]["capture_time"]
-            times = [r["time"] for r in token_data]
+            times = [r["time"] for r in token_data if not pd.isnull(r["swap_price"])]
+            if not times:
+                continue
             time_start = min(times)
             time_end = max(times)
 
@@ -32,7 +34,7 @@ class ReadableAnalytic:
             ][0]
             amount_start_time = [r["swap_time"] for r in token_data if r["swap_price"] == amount_start][0]
 
-            all_amounts = [r["swap_price"] for r in token_data]
+            all_amounts = [r["swap_price"] for r in token_data  if not pd.isnull(r["swap_price"])]
 
             percent_diffirences = [
                 r["percentage_difference"]
@@ -60,10 +62,10 @@ class ReadableAnalytic:
             
             last_percent_diffirence = [r["percentage_difference"] for r in token_data if r["time"] == time_end][0]
             
-            try:
-                diff = (max_amount - amount_start) / amount_start * 100
-            except ZeroDivisionError:
-                diff = 0
+            # try:
+            diff = (max_amount - amount_start) / amount_start * 100
+            # except ZeroDivisionError:
+            #     diff = 0
             
             obj = {
                 "Адрес Токена": token,
@@ -92,10 +94,11 @@ class ReadableAnalytic:
 
 async def main():
     analytic = ReadableAnalytic(fn="statistic.db")
+    analytic = ReadableAnalytic(fn="database-old2.db")
     # analytic = ReadableAnalytic()
     df = analytic.construct_data()
-    df.to_csv("data-statistic.csv", index=False)
-    # df.to_csv("data.csv", index=False)
+    # df.to_csv("data-statistic.csv", index=False)
+    df.to_csv("data.csv", index=False)
     ...
 
 
