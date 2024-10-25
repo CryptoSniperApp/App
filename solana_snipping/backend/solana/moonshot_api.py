@@ -201,8 +201,9 @@ class MoonshotAPI:
                 program_address = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG"
                 async with websockets.client.connect(
                     # "wss://api.mainnet-beta.solana.com",
-                    "wss://solana-mainnet.core.chainstack.com/e1bdb461a462bbd0c7d6f8e6fe5d97d7",
+                    # "wss://solana-mainnet.core.chainstack.com/e1bdb461a462bbd0c7d6f8e6fe5d97d7",
                     # "wss://solana-mainnet.g.a lchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq",
+                    "ws://145.40.87.83:10000",
                     ping_interval=None
                 ) as websocket:
                     msg = orjson.dumps(
@@ -247,13 +248,13 @@ class MoonshotAPI:
                     from pprint import pprint
                     while True:
                         raw = await websocket.recv()
-                        # d = orjson.loads(raw)
-                        # pprint(d) 
-                        ...
-                        asyncio.eager_task_factory(
-                            loop=loop,
-                            coro=send_in_queue(raw)
-                        )
+                        d = orjson.loads(raw)
+                        pprint(d) 
+                        # ...
+                        # asyncio.eager_task_factory(
+                        #     loop=loop,
+                        #     coro=send_in_queue(raw)
+                        # )
                         # await asyncio.sleep(1000)
                         
             except websockets.exceptions.ConnectionClosedError:
@@ -331,7 +332,16 @@ class MoonshotAPI:
         )
         self._setup_grpc_stub()
         if not transport.websocket:
-            await transport.connect()
+            last = None
+            for _ in range(5):
+                try:
+                    await transport.connect()
+                    break
+                except Exception as e:
+                    last = e
+                    await asyncio.sleep(1)
+            if last:
+                raise last
 
         try:
             while True:
@@ -636,7 +646,6 @@ class MoonshotAPI:
         transport = WebsocketsTransport(
             url=url, headers=headers, ping_interval=20, pong_timeout=60
         )
-        await transport.connect()
         
         async def yield_data(data: dict):
             
@@ -647,41 +656,50 @@ class MoonshotAPI:
                         await queue.put((trade, mint))
                         for queue in self._mints_price_watch_queues
                     ]
+        
+        failed = 0
+        while True:
+            try:
+                await transport.connect()
+                loop = asyncio.get_running_loop()
+                while True:
+                    try:
+                        async for result in transport.subscribe(gql(query)):
+                            if result.errors:
+                                print(f"result errors: {result.errors}")
+                                continue
+                            
+                            data = result.data
+                            f = asyncio.eager_task_factory(loop, yield_data(data))
+                            f.add_done_callback(asyncio_callbacks.raise_exception_if_set)
 
-        try:
-            loop = asyncio.get_running_loop()
-            while True:
-                try:
-                    async for result in transport.subscribe(gql(query)):
-                        if result.errors:
-                            print(f"result errors: {result.errors}")
-                            continue
-                        
-                        data = result.data
-                        f = asyncio.eager_task_factory(loop, yield_data(data))
-                        f.add_done_callback(asyncio_callbacks.raise_exception_if_set)
+                    except (
+                        websockets.exceptions.ConnectionClosedError,
+                        TransportClosed,
+                    ) as e:
+                        if "keepalive ping timeout" in str(e):
+                            logger.warning(
+                                "Соединение закрыто из-за таймаута пинга. Переподключение..."
+                            )
+                            await asyncio.sleep(5)
+                        elif isinstance(e, websockets.exceptions.ConnectionClosedError):
+                            logger.error(f"Ошибка соединения WebSocket: {e}")
+                            break
+                            # await asyncio.sleep(3)
 
-                except (
-                    websockets.exceptions.ConnectionClosedError,
-                    TransportClosed,
-                ) as e:
-                    if "keepalive ping timeout" in str(e):
-                        logger.warning(
-                            "Соединение закрыто из-за таймаута пинга. Переподключение..."
-                        )
-                        await asyncio.sleep(5)
-                    elif isinstance(e, websockets.exceptions.ConnectionClosedError):
-                        logger.error(f"Ошибка соединения WebSocket: {e}")
-                        # await asyncio.sleep(3)
+                        if not transport.websocket:
+                            await transport.connect()
 
-                    if not transport.websocket:
-                        await transport.connect()
-
-                except Exception as e:
-                    logger.exception(e)
-                    await asyncio.sleep(3)
-        finally:
-            await transport.close()
+                    except Exception as e:
+                        logger.exception(e)
+                        await asyncio.sleep(3)
+            except Exception as e:
+                logger.exception(e)
+                failed += 1
+            finally:
+                if failed >= 5:
+                    await transport.close()
+                    return
 
 
 async def main():

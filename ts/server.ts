@@ -9,6 +9,7 @@ import * as wallet_utils from './wallet_utils';
 import { web3 } from "@project-serum/anchor";
 import { ConnectionSolanaPool } from "./connection_pool";
 import { MyAnchorProviderV1 } from "./trade_utils";
+import proxies from "./proxies.json"
 
 dotenv.config();
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
@@ -99,7 +100,6 @@ const tokensImpl: pools.TokensSolanaServer = {
     call: grpc.ServerUnaryCall<pools.RequestSwapTokens, pools.RequestSwapTokens>, 
     callback: grpc.sendUnaryData<pools.ResponseSwapTokens>
   ): Promise<void> {
-    let connection = connPool.getConnectionWithProxy();
     let resp;
     try {
       let req = call.request;
@@ -135,7 +135,7 @@ const tokensImpl: pools.TokensSolanaServer = {
         }
 
       }
-      var decimals;
+      var decimals: number;
 
       if (req.decimal === 0 || !req.decimal) {
         try {
@@ -154,19 +154,42 @@ const tokensImpl: pools.TokensSolanaServer = {
         decimals = req.decimal;
       }
       
-      let txHash: string = "";
-      let taken: number | null = null;
+      let signatures: string[] = [];
+      var taken: number | null = null;
       
-      [txHash, taken] = await trade_utils.swapTokens(
-        connection, 
-        req.transactionType as "BUY" | "SELL", 
-        req.mint,
-        req.privateKey,
-        req.amount, 
-        slippage,
-        microlamports,
-        decimals
-      )
+      let start = Date.now();
+      let promises: Promise<void>[] = [];
+
+      // let proxy = proxies.proxies[Math.floor(Math.random()*proxies.proxies.length)];
+      proxies.proxies.forEach((proxy) => {
+        let promise = async () => {
+          
+          let connection = connPool.getConnectionWithProxy(proxy);
+          let [txHashes, taken] = await trade_utils.swapTokens({
+            connection,
+            txType: req.transactionType as "BUY" | "SELL", 
+            mintAddress: req.mint,
+            privKeyWallet: req.privateKey,
+            amount: req.amount, 
+            slippageBps: slippage,
+            microLamports: microlamports,
+            decimals: decimals,
+            blockHash: req.lastBlockhash ? req.lastBlockhash : null,
+            lastValidBlockHeight: req.lastValidBlockHeight ? req.lastValidBlockHeight: null,
+            confirmBuyOperation: true,
+            confirmTransaction: true,
+            token_on_moonshot: req.onMoonshot
+          });
+          for (let txHash of txHashes) {
+            if (!(signatures.includes(txHash))) {
+              signatures.push(...txHashes);
+            }
+          }
+        };
+        promises.push(promise())
+      })
+      await Promise.all(promises);
+      taken = Date.now() - start
 
       if (req.closeAccount == true) {
         try {
@@ -184,7 +207,7 @@ const tokensImpl: pools.TokensSolanaServer = {
       }
 
       resp = pools.ResponseSwapTokens.create({
-        txSignature: txHash,
+        txSignatures: signatures,
         msTimeTaken: taken ? taken.toString() : "",
         success: true
       });
@@ -192,7 +215,7 @@ const tokensImpl: pools.TokensSolanaServer = {
     } catch (error: any) {
       console.error(`we got an error when try to swap tokens. error: ${error}. mint: ${call.request.mint}`)
       resp = pools.ResponseSwapTokens.create({
-        txSignature: "",
+        txSignatures: [],
         msTimeTaken: "",
         success: false,
         error: `${error.stack}`

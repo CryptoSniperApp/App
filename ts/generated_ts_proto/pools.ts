@@ -56,11 +56,14 @@ export interface RequestSwapTokens {
   swapAll: boolean;
   tokenAccountAddress: string;
   decimal: number;
+  onMoonshot: boolean;
+  lastBlockhash: string;
+  lastValidBlockHeight: number;
 }
 
 export interface ResponseSwapTokens {
   error: string;
-  txSignature: string;
+  txSignatures: string[];
   msTimeTaken: string;
   success: boolean;
 }
@@ -534,6 +537,9 @@ function createBaseRequestSwapTokens(): RequestSwapTokens {
     swapAll: false,
     tokenAccountAddress: "",
     decimal: 0,
+    onMoonshot: false,
+    lastBlockhash: "",
+    lastValidBlockHeight: 0,
   };
 }
 
@@ -568,6 +574,15 @@ export const RequestSwapTokens: MessageFns<RequestSwapTokens> = {
     }
     if (message.decimal !== 0) {
       writer.uint32(80).int32(message.decimal);
+    }
+    if (message.onMoonshot !== false) {
+      writer.uint32(88).bool(message.onMoonshot);
+    }
+    if (message.lastBlockhash !== "") {
+      writer.uint32(98).string(message.lastBlockhash);
+    }
+    if (message.lastValidBlockHeight !== 0) {
+      writer.uint32(104).int32(message.lastValidBlockHeight);
     }
     return writer;
   },
@@ -659,6 +674,30 @@ export const RequestSwapTokens: MessageFns<RequestSwapTokens> = {
           message.decimal = reader.int32();
           continue;
         }
+        case 11: {
+          if (tag !== 88) {
+            break;
+          }
+
+          message.onMoonshot = reader.bool();
+          continue;
+        }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.lastBlockhash = reader.string();
+          continue;
+        }
+        case 13: {
+          if (tag !== 104) {
+            break;
+          }
+
+          message.lastValidBlockHeight = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -680,6 +719,9 @@ export const RequestSwapTokens: MessageFns<RequestSwapTokens> = {
       swapAll: isSet(object.swapAll) ? globalThis.Boolean(object.swapAll) : false,
       tokenAccountAddress: isSet(object.tokenAccountAddress) ? globalThis.String(object.tokenAccountAddress) : "",
       decimal: isSet(object.decimal) ? globalThis.Number(object.decimal) : 0,
+      onMoonshot: isSet(object.onMoonshot) ? globalThis.Boolean(object.onMoonshot) : false,
+      lastBlockhash: isSet(object.lastBlockhash) ? globalThis.String(object.lastBlockhash) : "",
+      lastValidBlockHeight: isSet(object.lastValidBlockHeight) ? globalThis.Number(object.lastValidBlockHeight) : 0,
     };
   },
 
@@ -715,6 +757,15 @@ export const RequestSwapTokens: MessageFns<RequestSwapTokens> = {
     if (message.decimal !== 0) {
       obj.decimal = Math.round(message.decimal);
     }
+    if (message.onMoonshot !== false) {
+      obj.onMoonshot = message.onMoonshot;
+    }
+    if (message.lastBlockhash !== "") {
+      obj.lastBlockhash = message.lastBlockhash;
+    }
+    if (message.lastValidBlockHeight !== 0) {
+      obj.lastValidBlockHeight = Math.round(message.lastValidBlockHeight);
+    }
     return obj;
   },
 
@@ -733,12 +784,15 @@ export const RequestSwapTokens: MessageFns<RequestSwapTokens> = {
     message.swapAll = object.swapAll ?? false;
     message.tokenAccountAddress = object.tokenAccountAddress ?? "";
     message.decimal = object.decimal ?? 0;
+    message.onMoonshot = object.onMoonshot ?? false;
+    message.lastBlockhash = object.lastBlockhash ?? "";
+    message.lastValidBlockHeight = object.lastValidBlockHeight ?? 0;
     return message;
   },
 };
 
 function createBaseResponseSwapTokens(): ResponseSwapTokens {
-  return { error: "", txSignature: "", msTimeTaken: "", success: false };
+  return { error: "", txSignatures: [], msTimeTaken: "", success: false };
 }
 
 export const ResponseSwapTokens: MessageFns<ResponseSwapTokens> = {
@@ -746,8 +800,8 @@ export const ResponseSwapTokens: MessageFns<ResponseSwapTokens> = {
     if (message.error !== "") {
       writer.uint32(10).string(message.error);
     }
-    if (message.txSignature !== "") {
-      writer.uint32(18).string(message.txSignature);
+    for (const v of message.txSignatures) {
+      writer.uint32(18).string(v!);
     }
     if (message.msTimeTaken !== "") {
       writer.uint32(26).string(message.msTimeTaken);
@@ -778,7 +832,7 @@ export const ResponseSwapTokens: MessageFns<ResponseSwapTokens> = {
             break;
           }
 
-          message.txSignature = reader.string();
+          message.txSignatures.push(reader.string());
           continue;
         }
         case 3: {
@@ -809,7 +863,9 @@ export const ResponseSwapTokens: MessageFns<ResponseSwapTokens> = {
   fromJSON(object: any): ResponseSwapTokens {
     return {
       error: isSet(object.error) ? globalThis.String(object.error) : "",
-      txSignature: isSet(object.txSignature) ? globalThis.String(object.txSignature) : "",
+      txSignatures: globalThis.Array.isArray(object?.txSignatures)
+        ? object.txSignatures.map((e: any) => globalThis.String(e))
+        : [],
       msTimeTaken: isSet(object.msTimeTaken) ? globalThis.String(object.msTimeTaken) : "",
       success: isSet(object.success) ? globalThis.Boolean(object.success) : false,
     };
@@ -820,8 +876,8 @@ export const ResponseSwapTokens: MessageFns<ResponseSwapTokens> = {
     if (message.error !== "") {
       obj.error = message.error;
     }
-    if (message.txSignature !== "") {
-      obj.txSignature = message.txSignature;
+    if (message.txSignatures?.length) {
+      obj.txSignatures = message.txSignatures;
     }
     if (message.msTimeTaken !== "") {
       obj.msTimeTaken = message.msTimeTaken;
@@ -838,7 +894,7 @@ export const ResponseSwapTokens: MessageFns<ResponseSwapTokens> = {
   fromPartial<I extends Exact<DeepPartial<ResponseSwapTokens>, I>>(object: I): ResponseSwapTokens {
     const message = createBaseResponseSwapTokens();
     message.error = object.error ?? "";
-    message.txSignature = object.txSignature ?? "";
+    message.txSignatures = object.txSignatures?.map((e) => e) || [];
     message.msTimeTaken = object.msTimeTaken ?? "";
     message.success = object.success ?? false;
     return message;

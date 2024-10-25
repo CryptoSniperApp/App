@@ -2,6 +2,7 @@ import { Connection } from "@solana/web3.js";
 import * as web3 from "@solana/web3.js";
 import axios, { AxiosInstance } from "axios";
 import { HttpsProxyAgent } from "hpagent";
+import proxies from "./proxies.json"
 
 
 export async function axiosFetchWithRetries(
@@ -105,8 +106,11 @@ export class ConnectionSolanaPool {
       return this.chainstackConnection;
     }
   
-    getConnectionWithProxy() {
-      let proxyUrl = process.env.PROXY_URL as string;
+    getConnectionWithProxy(proxyUrl: string | null = null) {
+      if (!proxyUrl) {
+        proxyUrl = process.env.PROXY_URL as string;
+      };
+
       let agent = new HttpsProxyAgent({ proxy: proxyUrl});
       let axiosObject = axios.create({
           httpsAgent: agent,
@@ -115,8 +119,11 @@ export class ConnectionSolanaPool {
       let rpc = web3.clusterApiUrl("mainnet-beta");
       let connection = new web3.Connection(rpc, {
         async fetch(input, init?) {
-            // console.log("Fetching: ", input, "init: ", init);
-            return await axiosFetchWithRetries(axiosObject, input, init);
+            let start = Date.now()
+            let method = JSON.parse(init?.body as string).method
+            let res = await axiosFetchWithRetries(axiosObject, input, init);
+            console.log(`method: ${method}. request taken: ${Date.now() - start}ms`);
+            return res
         }
       });
   

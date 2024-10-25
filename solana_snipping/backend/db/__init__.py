@@ -22,6 +22,13 @@ class AnalyticData(Base):
     percentage_difference: Mapped[float] = mapped_column(Float, nullable=True)
     comment: Mapped[str] = mapped_column(String, nullable=True)
     meta: Mapped[str] = mapped_column(String, nullable=True)
+    wallet_public_key: Mapped[str] = mapped_column(String, nullable=True)
+
+
+class Cache(Base):
+    __tablename__ = "cache"
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True)
+    cache_value: Mapped[str] = mapped_column(String, nullable=True)
 
 
 def create_async_sessiomaker():

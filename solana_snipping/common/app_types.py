@@ -20,4 +20,8 @@ class AnalyticData(BaseModel):
     percentage_difference: float | N = N
     comment: str | N = N
     meta: str | N = N
-    
+    wallet_public_key: str | N = N
+
+class CacheData(BaseModel):
+    id: int | N = N
+    cache_value: str | N = N

@@ -2,7 +2,7 @@ import * as web3 from "@solana/web3.js";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import base58 from "bs58";
 import * as spl from '@solana/spl-token';
-import { BaseAnchorProvider, Environment, FixedSide, Moonshot, programId, tokenLaunchpadIdlV1 } from '@wen-moon-ser/moonshot-sdk';
+import { AnchorProviderV1, BaseAnchorProvider, Environment, FixedSide, Moonshot, programId, tokenLaunchpadIdlV1 } from '@wen-moon-ser/moonshot-sdk';
 import { ComputeBudgetProgram } from '@solana/web3.js';
 import BN from "bn.js";
 import AmmImpl from '@mercurial-finance/dynamic-amm-sdk';
@@ -12,6 +12,7 @@ import { ResponseError } from "@jup-ag/api";
 import { ConnectionSolanaPool } from "./connection_pool";
 import { withTimeout } from "./main";
 import * as anchor from "@coral-xyz/anchor";
+import { base64 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
 
 
 export async function getTokenAmountInWallet(
@@ -39,24 +40,66 @@ export class MyAnchorProviderV1 extends BaseAnchorProvider<any> {
 }
 
 
-export async function swapTokens(
-    connection: Connection,
-    txType: "BUY" | "SELL",
-    mintAddress: string,
-    privKeyWallet: string,
-    amount: number,
-    slippageBps: number | null = null,
-    microLamports: number | null = null,
-    decimals: number | null = null,
-    commitment: web3.Commitment = 'confirmed',
-    confirmTransaction: boolean = true,
-    confirmBuyOperation: boolean = true
-): Promise<[string, number]> {
+export async function confirmTransactionStatus(
+    connection: web3.Connection, tx: string, commitment: web3.Commitment, timeout: number = 120_000
+) {
+    var success = false;
+    let promise = async () => {
+        var resp = await connection.getSignatureStatuses([tx], {searchTransactionHistory: false});
+        while (resp.value[0]?.confirmationStatus !== commitment) {
+            try {
+                resp = await connection.getSignatureStatuses([tx], {searchTransactionHistory: false});
+            } catch (error: any) {
+                console.log(`error ${error}. stack: ${error.stack}`)
+            }
+        }
+        if (resp.value[0].confirmationStatus === commitment) {
+            success = true
+        }
+    }
+    await withTimeout(promise(), timeout)
+    return success
+}
+
+
+export interface SwapTokenArgs {
+    connection: Connection;
+    txType: "BUY" | "SELL";
+    mintAddress: string;
+    privKeyWallet: string;
+    amount: number;
+    slippageBps?: number | null;
+    microLamports?: number | null;
+    decimals?: number | null;
+    commitment?: web3.Commitment;
+    confirmTransaction?: boolean;
+    confirmBuyOperation?: boolean;
+    token_on_moonshot?: boolean;
+    blockHash?: null | string;
+    lastValidBlockHeight?: null | number;
+}
+
+export async function swapTokens({
+    connection,
+    txType,
+    mintAddress,
+    privKeyWallet,
+    amount,
+    slippageBps = null,
+    microLamports = null,
+    decimals = null,
+    commitment = 'confirmed',
+    confirmTransaction = true,
+    confirmBuyOperation = false,
+    token_on_moonshot = false,
+    blockHash = null,
+    lastValidBlockHeight = null
+}: SwapTokenArgs): Promise<[string[], number]> {
     if (!slippageBps) {
         slippageBps = 500;
     }
     if (!microLamports) {
-        microLamports = 600_000;
+        microLamports = 100_000;
     }
     if (!decimals) {
         decimals = 9;
@@ -81,64 +124,39 @@ export async function swapTokens(
     }
 
     const token = moonshot.Token({ mintAddress: mintAddress });
-    let curvePos = null;
-    try {
+    let curvePos: bigint | null = null;
+    
+    let getCurvePosition = async () => {
         if (txType === "BUY") {
             for (let i = 0; i < 15; i++) {
                 try {
                     curvePos = await token.getCurvePosition();
                     break;
                 } catch (error: any)  { 
+                    if (!token_on_moonshot) {
+                        throw error
+                    }
                     console.log(`${error}. ${error.stack}`)
                     await new Promise(res => setTimeout(res, 1500));
                 }
             }
         }
-        
         if (!curvePos) {
             curvePos = await token.getCurvePosition();
         }
 
         console.log('Current position of the curve: ', curvePos);
+    }
+
+    try {
+        if (!token_on_moonshot) {
+            await getCurvePosition();
+        }
     } catch (error) {
         console.log('Error getting curve position: ', error);
         let start = Date.now();
         let res: any;
-
-        let meteoraPoolAddress;
-        for (let i = 0; i < 10; i++) {
-            try {
-                meteoraPoolAddress = await getPoolByMintMeteora(mintAddress)
-                console.log('meteoraPoolAddress', meteoraPoolAddress);
-                break;
-            } catch {
-                continue;
-            }
-        }
-
-        if (meteoraPoolAddress) {
-            let taken;
-            console.log('swapMeteoraTokens');
-            [res, taken] = await swapMeteoraTokens(
-                connection,
-                new PublicKey(meteoraPoolAddress.pool_address),
-                txType,
-                amount,
-                kp,
-                slippageBps / 100,
-                50,
-                200_000,
-                commitment,
-                confirmTransaction,
-            )
-
-            if (!res) {
-                throw new Error('Error swapping tokens');
-            }
-            return [res, taken];
-        }
         
-
         try {
             console.log('swapTokensOnJupiter');
             res = await swapTokensOnJupiter(
@@ -154,10 +172,39 @@ export async function swapTokens(
                 confirmTransaction
             )
         } catch (error) {
-            if (error instanceof ResponseError && error.response.status === 400) {
-                console.error("Ошибка в Jupiter: ", error);
-            } else {
-                console.error("Произошла ошибка:", error);
+            console.error("Ошибка в Jupiter: ", error);
+            let meteoraPoolAddress;
+            for (let i = 0; i < 10; i++) {
+                try {
+                    meteoraPoolAddress = await getPoolByMintMeteora(mintAddress)
+                    console.log('meteoraPoolAddress', meteoraPoolAddress);
+                    break;
+                } catch (error: any) {
+                    console.log(`get error on meteoraPoolAddress ${error}. stack: ${error.stack}`);
+                    continue;
+                }
+            }
+
+            if (meteoraPoolAddress) {
+                let taken;
+                console.log('swapMeteoraTokens');
+                [res, taken] = await swapMeteoraTokens(
+                    connection,
+                    new PublicKey(meteoraPoolAddress.pool_address),
+                    txType,
+                    amount,
+                    kp,
+                    slippageBps / 100,
+                    50,
+                    200_000,
+                    commitment,
+                    confirmTransaction,
+                )
+
+                if (!res) {
+                    throw new Error('Error swapping tokens');
+                }
+                return [res, taken];
             }
         }
 
@@ -166,25 +213,13 @@ export async function swapTokens(
     const creator = Keypair.fromSecretKey(base58.decode(privKeyWallet));
     const tokenAmount = BigInt(Math.round(amount * (10 ** decimals)));
     
-    var collateralAmount = null;
-    var errorCollateralAmount;
-    for (let i = 0; i < 10; i++) {
-        try {
-            collateralAmount = await token.getCollateralAmountByTokens({
-                tokenAmount,
-                tradeDirection: txType,
-                curvePosition: curvePos
-            });
-            break;
-        } catch (error: any) {
-            console.error(`error: ${error}. stack: ${error.stack}`)
-            errorCollateralAmount = error;
-            await new Promise(res => setTimeout(res, 800));
-        }   
-    }
-
-    if (collateralAmount === null) {
-        throw errorCollateralAmount;
+    var collateralAmount: bigint;
+    if (txType === "BUY") {
+        collateralAmount = BigInt(400000000);
+        slippageBps = 500;
+    } else {
+        collateralAmount = BigInt(0);
+        slippageBps = 5000;
     }
 
     let fixedSide: FixedSide;
@@ -194,81 +229,202 @@ export async function swapTokens(
         fixedSide = FixedSide.IN;
     }
 
-    const { ixs } = await token.prepareIxs({
-        slippageBps: slippageBps,
-        creatorPK: creator.publicKey.toBase58(),
-        tokenAmount,
-        collateralAmount,
-        tradeDirection: txType,
-        fixedSide: fixedSide,
-    });
+    var ixsValue: any[] = [];
+    let getIxsPromise = async () => {
+        let { ixs } = await token.prepareIxs({
+            slippageBps: slippageBps,
+            creatorPK: creator.publicKey.toBase58(),
+            tokenAmount,
+            collateralAmount,
+            tradeDirection: txType,
+            fixedSide: fixedSide,
+        })
+        ixsValue = ixs
+    }
 
-    const priorityIx = ComputeBudgetProgram.setComputeUnitPrice({
-        microLamports: microLamports,
-    });
+    let updateBlockHash = async () => {
+        let response = await connection.getLatestBlockhash();
+        blockHash = response.blockhash;
+        lastValidBlockHeight = response.lastValidBlockHeight;
+    }
 
+    var promises: any[] = [
+        getIxsPromise()
+    ];
+
+    if (!blockHash || !lastValidBlockHeight) {
+        promises.push(updateBlockHash())
+    }
+
+    var ata: any;
+    if (txType === "BUY") {
+        let getAtaPromise = async () => {
+            let response = await spl.getAssociatedTokenAddress(
+                new PublicKey(mintAddress),
+                kp.publicKey,
+            )
+            ata = response.toBase58();
+        }
+        promises.push(getAtaPromise())
+    }
+
+    await Promise.all(promises);
     let start = Date.now();
 
-    let txHash;
-    if (confirmBuyOperation && txType === "BUY") {
-        var attempt = 0;
-
-        while (attempt < 3) {
-            try {
-                let blockhash = await connection.getLatestBlockhash();
-                let msg = new web3.TransactionMessage({
-                    payerKey: kp.publicKey,
-                    instructions: [priorityIx, ...ixs],
-                    recentBlockhash: blockhash.blockhash,
-                }).compileToV0Message();
-                let t = new web3.VersionedTransaction(msg);
-                t.sign([creator]);
-
-                txHash = await connection.sendRawTransaction(t.serialize(), {
-                    skipPreflight: true,
-                    maxRetries: 5,
-                    preflightCommitment: commitment,
-                });
-                await connection.confirmTransaction({
-                    blockhash: blockhash.blockhash,
-                    lastValidBlockHeight: blockhash.lastValidBlockHeight,
-                    signature: txHash
-                })
-                console.log(`Transaction ${txHash} confirmed successfully on attempt ${attempt + 1}`);
-                break
-            } catch (error: any) {
-                console.info(
-                    `error when confirm transaction on ${txType} 
-                    Moonshot: ${error}. trace ${error.stack}`
-                )
-                await new Promise(res => setTimeout(res, 1500));
-            }
-            attempt++
+    let sendTransaction = async (blockHash: string, lastValidBlockHeight: number) => {
+        let instructions;
+        if (txType === "BUY") {
+            instructions = [
+                spl.createAssociatedTokenAccountInstruction(
+                    kp.publicKey,
+                    new PublicKey(ata),
+                    kp.publicKey,
+                    new PublicKey(mintAddress)
+                ), ...ixsValue
+            ]
+        } else {
+            instructions = [...ixsValue]
         }
-        if (!txHash) {
-            throw new Error(`error when sending transaction on ${txType}`)
-        }
-    } else {
-        let blockhash = await connection.getLatestBlockhash();
+
         let msg = new web3.TransactionMessage({
             payerKey: kp.publicKey,
-            instructions: [priorityIx, ...ixs],
-            recentBlockhash: blockhash.blockhash,
+            instructions: [
+                ComputeBudgetProgram.setComputeUnitPrice({
+                    microLamports: microLamports,
+                }), 
+                ...instructions
+            ],
+            recentBlockhash: blockHash,
         }).compileToV0Message();
         let t = new web3.VersionedTransaction(msg);
         t.sign([creator]);
 
-        txHash = await connection.sendRawTransaction(t.serialize(), {
-            skipPreflight: true,
-            maxRetries: 15,
-            preflightCommitment: commitment,
-        });
+        let lastError = null;
+        let signatures: string[] = [];
+
+        let send = async (transaction: web3.VersionedTransaction) => {
+            let response;
+            try {
+                console.log(`send transaction at ${new Date()}`)
+                response = await connection.sendRawTransaction(transaction.serialize(), {
+                    skipPreflight: true,
+                    maxRetries: 5,
+                    preflightCommitment: commitment,
+                });
+            } catch (error) {
+                lastError = error;
+                console.log(lastError)
+                return;
+            }
+            signatures.push(response);
+            console.log(`Transaction ${response} sended successfully`);
+        }
+
+        let promises: any[] = [];
+        let transactions: web3.VersionedTransaction[] = [];
+        let percents;
+
+        if (txType == "BUY") {
+            percents = [1, 5, 10];
+            // transactions = [];
+            
+        } else {
+            percents = [1, 2];
+            // transactions = [t]
+        }
+
+        for (let percent of percents) {
+            let msg = new web3.TransactionMessage({
+                payerKey: kp.publicKey,
+                instructions: [
+                    ComputeBudgetProgram.setComputeUnitPrice({
+                        microLamports: microLamports * percent,
+                    }), 
+                    ...instructions
+                ],
+                recentBlockhash: blockHash,
+            }).compileToV0Message();
+            let t = new web3.VersionedTransaction(msg);
+            t.sign([creator]);
+            transactions.push(t)
+        }
+
+        transactions.forEach((transaction) => {promises.push(send(transaction))})
+        await Promise.all(promises);
+
+        if (lastError) {
+            throw lastError
+        }
+
+        return signatures;
+    }
+
+    let txHashs = [];
+    while (!blockHash || !lastValidBlockHeight) {
+        await updateBlockHash();
+    }
+
+    if ((confirmBuyOperation && txType === "BUY") || confirmTransaction) {
+        var attempt = 0;
+        while (attempt < 3) {
+            attempt++;
+            try {
+                let signatures = await sendTransaction(blockHash, lastValidBlockHeight);
+                let confirmedSignatures: string[] = [];
+                let timeout = 120_000;
+
+                let promises = signatures.map((sig) => {
+                    let promise = async () => {
+                        try {
+                            let res = await withTimeout(
+                                connection.confirmTransaction({
+                                    blockhash: blockHash as string,
+                                    lastValidBlockHeight: lastValidBlockHeight as number,
+                                    signature: sig,
+                                }, "confirmed"), 
+                                timeout,
+                            )
+                            // let res = await confirmTransactionStatus(connection, sig, commitment);
+                            if (res) {
+                                confirmedSignatures.push(sig)
+                            }
+                        } catch (error) {
+                            if (`${error}`.includes("Timeout after")) {
+                                // похуй
+                                confirmedSignatures.push(sig)
+                            }
+                        }
+                    }
+                    return promise();
+                })
+                
+                await Promise.all(promises);
+                txHashs.push(...confirmedSignatures);
+                break
+
+            } catch (error: any) {
+                console.info(
+                    `error when confirm transaction on ${txType}
+                    Moonshot: ${error}. trace ${error.stack}`
+                )
+                await Promise.all([
+                    new Promise(res => setTimeout(res, 1500)),
+                    updateBlockHash()
+                ]);
+            }
+        }
+        if (txHashs.length === 0) {
+            throw new Error(`error when sending transaction on ${txType}`)
+        }
+    } else {
+        let signatures = await sendTransaction(blockHash, lastValidBlockHeight);
+        txHashs.push(...signatures);
     }
 
     let taken = Date.now() - start;
     console.log('Transaction time taken: ', taken, 'ms');
-    console.log(`${txType} Transaction Hash:`, txHash);
-    return [txHash, taken];
+    console.log(`${txType} Transaction Hashes:`, txHashs);
+    return [txHashs, taken];
 }
 
 
@@ -374,18 +530,19 @@ async function sellAll(connection: Connection, kp: Keypair) {
         }
         if (amount != null && `${amount}` !== "0" && amount < 50_000 * (10 ** decimals)) {
             try {
-                let promise = swapTokens(
+                let promise = swapTokens({
                     connection,
-                    "SELL",
-                    accountInfo.account.data["parsed"]["info"]["mint"],
-                    base58.encode(kp.secretKey),
-                    amount / web3.LAMPORTS_PER_SOL,
-                    500,
-                    50_000,
-                    9,
-                    'confirmed',
-                    false
-                )
+                    txType: "SELL",
+                    mintAddress: accountInfo.account.data["parsed"]["info"]["mint"],
+                    privKeyWallet: base58.encode(kp.secretKey),
+                    amount: amount / web3.LAMPORTS_PER_SOL,
+                    slippageBps: 500,
+                    microLamports: 50_000,
+                    decimals: 9,
+                    commitment: 'confirmed',
+                    confirmBuyOperation: true,
+                    confirmTransaction: true
+                })
                 promises.push(promise)
             } catch (error) {
                 console.error(error);
@@ -574,8 +731,8 @@ async function swapMeteoraTokens(
         while (attempts < 5) {
             attempts++;
             try {
-                // let wallet = new Wallet(kp);
-                // let provider = new AnchorProvider(connection, wallet, {
+                // let wallet = new anchor.Wallet(kp);
+                // let provider = new anchor.AnchorProvider(connection, wallet, {
                 //     commitment: commitment,
                 //     skipPreflight: true,
                 // });
@@ -627,6 +784,13 @@ async function swapMeteoraTokens(
 }
 
 
+function decodeMoonshotProgramTradeData(programData: string) {
+    let b = base64.decode(programData)
+    let provider = new AnchorProviderV1(web3.clusterApiUrl("mainnet-beta"));
+    let result = (provider.program.coder.events as any).decode(b);
+    return result;
+}
+
 
 async function test() {
     var privateKey = process.env.WALLET_MOONSHOT_PRIVATE_KEY as string;
@@ -647,9 +811,6 @@ async function test() {
     var mint = '8jayusxKifrCnx1b5hUAyxyyPhXQsyxpNN62pQsZBGB6';
     mint = '3SqaeJ6bhEQNRod5wJyDYyq6N28Wwz2jcEM5J8H9Rp9q';
     mint = '41upazdWAgLjfCkLGQwGDgj2knovnpPyr4q2ZVNjifLz'
-    mint = 'GLeMhfYHSHW12o4UC8b8tb7YriMp6tybpEFBUxjf7okf';
-    mint = '3eR3CfrR82NZyPiHDqECP9oTf43pQgwMVUL1Fv8YwZLc';
-
 
     // let ata = await getAssociatedTokenAccount(mint, kp.publicKey.toBase58());
     // let amount = await getTokenAmountInWallet(connection, ata.toBase58()) as number;
@@ -668,9 +829,6 @@ async function test() {
     // console.log(res);
 
     // let rpcUrl = process.env.MOONSHOT_RPC_ENDPOINT as string;
-    // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq';
-    // let rpcUrl = 'https://solana-mainnet.core.chainstack.com/e1bdb461a462bbd0c7d6f8e6fe5d97d7'
-    // let rpcUrl = 'https://solana-mainnet.g.alchemy.com/v2/q5Ps-5QwBKRtxjxNMVHwoNGAAVNj78Fq'
     // const connection = new Connection(rpcUrl, "confirmed");
 
     // let promises = [];
@@ -689,14 +847,55 @@ async function test() {
     // await Promise.all(promises);
     // console.log('Main time taken', Date.now() - start);
 
-    // await swapTokens(
-    //     connection,
-    //     "BUY",
-    //     mint,
-    //     privateKey, 
-    //     15,
-    // )
-    // await sellAll(connection, kp);
+    mint = 'JEGUQELAy86jBRuJsQjHbMJrWvHTfSWvuRuF7jiuaLdN';
+
+    let doFunc = async (session: web3.Connection) => {
+        let blockhash = await connection.getLatestBlockhash();
+        let loc = (session as any).location;
+
+        let start = new Date()
+        console.log(`[${loc}] time start`, start)
+
+        await swapTokens({
+            connection,
+            txType: "BUY",
+            mintAddress: mint,
+            privKeyWallet: privateKey, 
+            amount: 5,
+            token_on_moonshot: true,
+            blockHash: blockhash.blockhash,
+            lastValidBlockHeight: blockhash.lastValidBlockHeight + 10,
+            confirmBuyOperation: true
+        })
+        console.log(`[${loc}] time taken`, (new Date() as any) - (start as any))
+    };
+    let proxies = [
+        
+    ];
+    // let mainStart = Date.now();
+    // console.log(`start script at ${new Date()}`)
+    // await Promise.all([
+    //     proxies.map((proxy) => {
+    //         let conn: any = new ConnectionSolanaPool().getConnectionWithProxy(proxy);
+            
+    //         if (proxy.includes('e7ilIB4iF38l')) {
+    //             conn.location = 'США (New York)'
+    //         } else if (proxy.includes('IlFyCbnXF0Dx')) {
+    //             conn.location = 'Япония (Tokyo)'
+    //         } else if (proxy.includes('KL0hdzLAC3HL')) {
+    //             conn.location = 'Великобритания England London'
+    //         } else if (proxy.includes('KaB4wgmqc5Qc')) {
+    //             conn.location = 'Германия Rheinland-Pfalz'
+    //         } else {
+    //             throw new Error(proxy)
+    //         }
+        
+    //         return doFunc(conn)
+    //     })
+    // ])
+    // console.log(`Main time taken ${Date.now() - mainStart}`)
+
+    await sellAll(connection, kp);
 }
 
 

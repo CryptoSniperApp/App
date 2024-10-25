@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 
 # custom
+wallets.txt
+proxies.json
 package-lock.json
 proxies.txt
 js/

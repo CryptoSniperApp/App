@@ -53,15 +53,25 @@ class ReadableAnalytic:
             if max_amount_time - min_amount_time == 0:
                 continue
             
+            if len(all_amounts) > 1:
+                min_amount = min((a for a in all_amounts if a != amount_start))
+            else:
+                continue
+            
             last_percent_diffirence = [r["percentage_difference"] for r in token_data if r["time"] == time_end][0]
-
+            
+            try:
+                diff = (max_amount - amount_start) / amount_start * 100
+            except ZeroDivisionError:
+                diff = 0
+            
             obj = {
                 "Адрес Токена": token,
                 "Цена в USD в начале": format_number_decimal(amount_start),
                 "Минимальная цена в USD": format_number_decimal(min_amount),
                 "Максимальная цена в USD": format_number_decimal(max_amount),
                 # "Разница в %": last_percent_diffirence,
-                "Разница между начальной и максимальной ценой в %": (max_amount - amount_start) / amount_start * 100,
+                "Разница между начальной и максимальной ценой в %": diff,
                 # "Первая ликвидность": first_liquidity,
                 # "Время открытия пула": datetime.fromtimestamp(pool_open_time).strftime("%H:%M:%S %d.%m.%Y") if pool_open_time else "",
                 "Время минимальной цены": datetime.fromtimestamp(min_amount_time).strftime("%H:%M:%S %d.%m.%Y"),
@@ -82,8 +92,10 @@ class ReadableAnalytic:
 
 async def main():
     analytic = ReadableAnalytic(fn="statistic.db")
+    # analytic = ReadableAnalytic()
     df = analytic.construct_data()
     df.to_csv("data-statistic.csv", index=False)
+    # df.to_csv("data.csv", index=False)
     ...
 
 

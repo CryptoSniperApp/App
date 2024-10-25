@@ -44,27 +44,40 @@ def setup_logger():
 
 
 async def solana_strategy():
+    setup_logger()
+    with open("wallets.txt") as f:
+        private_keys = [w.strip() for w in f.readlines()]
+        
     cache = []
     reset_cache = time.time()
     logging.getLogger("apscheduler").setLevel(logging.CRITICAL)
-    setup_logger()
-    client = AsyncClient("https://api.mainnet-beta.solana.com", "confirmed")
-    cfg = get_config()
 
     q = asyncio.Queue()
-    
     strategy = Moonshot()
+    
+    await strategy.update_latest_blockhash()
+    await strategy.load_cache()
     strategy.subscribe_to_moonshot_mints_create(queue=q)
-    MAIN_SCHEDULER.add_job(strategy.sell_all_tokens, "interval", seconds=60 * 5, max_instances=1)
-    # MAIN_SCHEDULER.add_job(save_cache, IntervalTrigger(seconds=40), max_instances=1)
+    
+    MAIN_SCHEDULER.add_job(strategy.update_latest_blockhash, "interval", seconds=20)
+    for private_key in private_keys:
+        MAIN_SCHEDULER.add_job(strategy.sell_all_tokens, "interval", args=(private_key,), seconds=60 * 5, max_instances=1)
 
     while True:
         signature, mint, dt, meta = await q.get()
-        # signature = "1yq9yJzgSkLPd8jekQiXHvs7wWNgtGPM4XzMnws2BMCV86zxGT49h7HVjcVKaFC4MZzMus61hmVJhrySqFVrdi3"
-        # mint = '581yp3B33wWJmQUPQ75x8ZtkWLQdjS97ZKTAAEYPa2of'
         # dt = datetime.now()
-        # data = await client.get_transaction(Signature.from_string(signature), encoding="base64", max_supported_transaction_version=0)
-        # meta = await strategy._moonshot_client.parse_mint_instruction_data(data.value.transaction.transaction.message.instructions[1].data)
+        # signature = '5j8z3bAS2PqfkfvWAsV4PjjPgXX5ZVVeXohQjPf5eqUPTvjMQkQHtefp5uyZXL4ntR3bf68ooQyWuxQyoNGGonXc'
+        # mint = 'FU8AGpYKnnMn2vUov9c1ZR573iPn12SfchcpGSKK4sZk'
+        # meta = {
+        #     'name': 'KAIROS', 
+        #     'symbol': 'KAIROS', 
+        #     'uri': 'https://cdn.dexscreener.com/cms/tokens/metadata/XFiuVeItvD8lBOHV9np7', 
+        #     'socials': [{'url': 'https://x.com/KairosCoinSOL', 'type': 'twitter'}, {'url': 'https://t.me/KairosCoinSOL', 'type': 'telegram'}], 
+        #     'websites': [{'label': 'Website', 'url': 'https://KairosCrypto.org'}], 
+        #     'image': 'https://cdn.dexscreener.com/cms/images/kltSd01YmNhbcFyq', 
+        #     'description': None, 
+        #     'decimals': 9
+        # }
         
         if time.time() - reset_cache >= 60 * 15:  # if more than 15 minutes have passed
             cache.clear()
@@ -94,9 +107,11 @@ async def solana_strategy():
             meta = meta.token.model_dump()
 
         try:
-            strategy.handle_transaction(signature, dt, mint, mint_meta=meta)
+            for private_key in private_keys:
+                strategy.handle_transaction(signature, dt, mint, mint_meta=meta, private_wallet_key=private_key)
         except Exception as e:
             logger.exception(e)
+        # await asyncio.sleep(1500)
 
 
 async def main():

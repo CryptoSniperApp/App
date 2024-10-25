@@ -2,7 +2,7 @@
 # sources: pools.proto
 # plugin: python-betterproto
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import betterproto
 import grpclib
@@ -48,12 +48,15 @@ class RequestSwapTokens(betterproto.Message):
     swap_all: bool = betterproto.bool_field(8)
     token_account_address: str = betterproto.string_field(9)
     decimal: int = betterproto.int32_field(10)
+    on_moonshot: bool = betterproto.bool_field(11)
+    last_blockhash: str = betterproto.string_field(12)
+    last_valid_block_height: int = betterproto.int32_field(13)
 
 
 @dataclass
 class ResponseSwapTokens(betterproto.Message):
     error: str = betterproto.string_field(1)
-    tx_signature: str = betterproto.string_field(2)
+    tx_signatures: List[str] = betterproto.string_field(2)
     ms_time_taken: str = betterproto.string_field(3)
     success: bool = betterproto.bool_field(4)
 
@@ -171,6 +174,9 @@ class TokensSolanaStub(betterproto.ServiceStub):
         swap_all: bool = False,
         token_account_address: str = "",
         decimal: int = 0,
+        on_moonshot: bool = False,
+        last_blockhash: str = "",
+        last_valid_block_height: int = 0,
     ) -> ResponseSwapTokens:
         request = RequestSwapTokens()
         request.transaction_type = transaction_type
@@ -183,6 +189,9 @@ class TokensSolanaStub(betterproto.ServiceStub):
         request.swap_all = swap_all
         request.token_account_address = token_account_address
         request.decimal = decimal
+        request.on_moonshot = on_moonshot
+        request.last_blockhash = last_blockhash
+        request.last_valid_block_height = last_valid_block_height
 
         return await self._unary_unary(
             "/TokensSolana/swapTokens",
