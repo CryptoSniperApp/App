@@ -1040,7 +1040,7 @@ class Moonshot:
             #     cache_value=orjson.dumps(get_cached_locals()).decode('utf-8')
             # )
             # await cache_repo.add(cache_value)
-
+            only_scan = False
             async with asyncio.timeout(seconds_watch):
                 while not exit_from_monitor:
                     try:
@@ -1095,7 +1095,6 @@ class Moonshot:
                             f"{max_price_sol}.\nPercentage diff: "
                             f"{percentage_diff}.\nMint - {mint}"
                         )
-                        only_scan = False
                         if only_scan:
                             continue
                         
