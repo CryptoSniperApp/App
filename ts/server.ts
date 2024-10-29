@@ -10,6 +10,8 @@ import { web3 } from "@project-serum/anchor";
 import { ConnectionSolanaPool } from "./connection_pool";
 import { MyAnchorProviderV1 } from "./trade_utils";
 import proxies from "./proxies.json"
+import { getRandomInt } from "./main";
+import * as pumpfun from "./pumpfun";
 
 dotenv.config();
 const connection = new Connection("https://api.mainnet-beta.solana.com", "confirmed");
@@ -160,10 +162,18 @@ const tokensImpl: pools.TokensSolanaServer = {
       let start = Date.now();
       let promises: Promise<void>[] = [];
 
-      // let proxy = proxies.proxies[Math.floor(Math.random()*proxies.proxies.length)];
       proxies.proxies.forEach((proxy) => {
         let promise = async () => {
-          
+          if ( proxy.includes("<") && proxy.includes(">") ) {
+            const portMatch = proxy.match(/<(\d+)-(\d+)>/);
+            if (portMatch) {
+                const minPort = parseInt(portMatch[1], 10);
+                const maxPort = parseInt(portMatch[2], 10);
+                let port = getRandomInt(minPort, maxPort);
+                proxy = proxy.replace(`<${minPort}-${maxPort}>`, port.toString());
+            }
+          }
+
           let connection = connPool.getConnectionWithProxy(proxy);
           let [txHashes, taken] = await trade_utils.swapTokens({
             connection,
@@ -458,9 +468,97 @@ const tokensImpl: pools.TokensSolanaServer = {
   }
 }
 
+const pumpFunImpl: pools.PumpFunServer = {
+  async decodePumpFunBuyEvent(
+    call: grpc.ServerUnaryCall<pools.DecodePumpFunBuyEvent, pools.DecodePumpFunBuyEvent>, 
+    callback
+  ): Promise<void> {
+    let response: pools.ResponseRpcOperation
+
+    try {
+      let start = Date.now();
+      let args = await pumpfun.decodePumpFunBuyEvent(call.request.programData)
+      response = pools.ResponseRpcOperation.create({
+        success: true,
+        rawData: JSON.stringify(args),
+        msTimeTaken: `${Date.now() - start}`
+      })
+    } catch (error: any) {
+      response = pools.ResponseRpcOperation.create({
+        success: false,
+        error: `${error}. stack: ${error.stack}`,
+        msTimeTaken: ""
+      })
+    }
+
+    callback(null, response)
+  },
+  async swapTokens(
+    call: grpc.ServerUnaryCall<pools.RequestPumpFunSwapTokens, pools.RequestPumpFunSwapTokens>, 
+    callback: grpc.sendUnaryData<pools.ResponseRpcOperation>
+  ): Promise<void> {
+    let response;
+
+    try {
+      let signatures: string[] = [];
+      if (call.request.slippageBps === 0) {
+        call.request.slippageBps = 500;
+      }
+      let start = Date.now();
+      let promises: Promise<void>[] = [];
+
+      proxies.proxies.forEach((proxy) => {
+        let promise = async () => {
+          if ( proxy.includes("<") && proxy.includes(">") ) {
+            const portMatch = proxy.match(/<(\d+)-(\d+)>/);
+            if (portMatch) {
+                const minPort = parseInt(portMatch[1], 10);
+                const maxPort = parseInt(portMatch[2], 10);
+                let port = getRandomInt(minPort, maxPort);
+                proxy = proxy.replace(`<${minPort}-${maxPort}>`, port.toString());
+            }
+          }
+          let connection = connPool.getConnectionWithProxy(proxy);
+          let result = await pumpfun.swap(
+            connection,
+            call.request.privateKey,
+            call.request.txType as "BUY" | "SELL",
+            call.request.mint,
+            call.request.amount,
+            call.request.slippageBps,
+            call.request.unitLimit,
+            call.request.unitPrice
+          )
+          if (result.success) {
+            signatures.push(result.signature as string)
+          }
+        }
+        promises.push(promise())
+      })
+
+      await Promise.all(promises);
+      response = pools.ResponseRpcOperation.create({
+        success: true,
+        msTimeTaken: `${Date.now() - start}`,
+        rawData: JSON.stringify(signatures)
+      })
+
+    } catch (error: any) {
+      response = pools.ResponseRpcOperation.create({
+        success: false,
+        error: `${error}. stack: ${error.stack}`,
+        msTimeTaken: ""
+      })
+    }
+
+    callback(null, response);
+  }
+}
+
 server.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), (error, port) => {
   server.addService(pools.PoolStateService, impl);
   server.addService(pools.TokensSolanaService, tokensImpl);
+  server.addService(pools.PumpFunService, pumpFunImpl);
   if (error) {
     throw error
   }

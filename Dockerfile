@@ -10,4 +10,5 @@ RUN poetry install --no-root --no-interaction --no-ansi
 
 COPY . /app/
 
-ENTRYPOINT python solana_snipping/main.py
+# ENTRYPOINT python solana_snipping/main.py
+ENTRYPOINT python solana_snipping/backend/solana/copy_trading.py

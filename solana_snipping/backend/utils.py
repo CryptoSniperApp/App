@@ -3,6 +3,7 @@ import decimal
 import random
 import re
 
+import orjson
 from loguru import logger
 import ua_generator
 
@@ -30,12 +31,12 @@ def append_hdrs(headers: dict):
     return headers
 
 
-def get_proxies(filepath: str = "proxies.txt"):
+def get_proxies(filepath: str = "ts/proxies.json"):
     with open(filepath) as f:
-        content = f.read()
+        content = orjson.loads(f.read())
     
     proxies = []
-    for proxy in content.splitlines():
+    for proxy in content["proxies"]:
         proxies_range = re.search(r"<(\d+-\d+)>", proxy)
         if proxies_range:
             proxies_range = proxies_range.group(1)
@@ -49,3 +50,8 @@ def get_proxies(filepath: str = "proxies.txt"):
             )
         proxies.append(proxy)
     return proxies
+
+
+def get_wallets_private_keys(filepath: str = "wallets.txt"):
+    with open(filepath) as f:
+        return [w.strip() for w in f.readlines()]

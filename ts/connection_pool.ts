@@ -120,9 +120,10 @@ export class ConnectionSolanaPool {
       let connection = new web3.Connection(rpc, {
         async fetch(input, init?) {
             let start = Date.now()
+            let startHR = new Date()
             let method = JSON.parse(init?.body as string).method
             let res = await axiosFetchWithRetries(axiosObject, input, init);
-            console.log(`method: ${method}. request taken: ${Date.now() - start}ms`);
+            console.log(`method: ${method}. request taken: ${Date.now() - start}ms. started at ${startHR}`);
             return res
         }
       });

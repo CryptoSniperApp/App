@@ -713,8 +713,7 @@ class Moonshot:
         
     @property
     def proxy_sol_client(self) -> AsyncClient:
-        with open("ts/proxies.json") as f:
-            proxies = orjson.loads(f.read())
+        proxies = get_proxies()
         
         if proxies:
             proxy = random.choice(proxies["proxies"])

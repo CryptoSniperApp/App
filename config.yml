@@ -35,6 +35,10 @@ microservices:
     host: $REDIS_HOST|127.0.0.1
     port: $REDIS_PORT|6379
 
+  pumpfun:
+    host: $GRPC_HOST|127.0.0.1
+    port: $GRPC_PORT|50051
+
 bitquery:
   token: $BITQUERY_TOKEN
   secret: $BITQUERY_SECRET

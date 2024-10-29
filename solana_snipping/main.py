@@ -16,6 +16,7 @@ from solders.signature import Signature
 from solana_snipping.backend.db import setup
 from solana_snipping.backend.solana.moonshot_api import MintToken
 from solana_snipping.backend.solana.strategies import Moonshot
+from solana_snipping.backend.utils import get_wallets_private_keys
 from solana_snipping.common.config import get_config
 from solana_snipping.common.constants import SOLANA_TOKEN_PROGRAM_ID
 from solana_snipping.frontend.telegram.alerting import log_in_chat
@@ -45,8 +46,7 @@ def setup_logger():
 
 async def solana_strategy():
     setup_logger()
-    with open("wallets.txt") as f:
-        private_keys = [w.strip() for w in f.readlines()]
+    private_keys = get_wallets_private_keys()
         
     cache = []
     reset_cache = time.time()

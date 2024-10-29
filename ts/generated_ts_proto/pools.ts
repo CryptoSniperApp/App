@@ -148,6 +148,20 @@ export interface DecodeMoonshotBuyInstructionData {
   instructionData: Uint8Array;
 }
 
+export interface DecodePumpFunBuyEvent {
+  programData: string;
+}
+
+export interface RequestPumpFunSwapTokens {
+  mint: string;
+  amount: number;
+  slippageBps: number;
+  unitLimit: number;
+  unitPrice: number;
+  privateKey: string;
+  txType: string;
+}
+
 function createBaseResponsePoolState(): ResponsePoolState {
   return {
     baseDecimal: 0,
@@ -2067,6 +2081,220 @@ export const DecodeMoonshotBuyInstructionData: MessageFns<DecodeMoonshotBuyInstr
   },
 };
 
+function createBaseDecodePumpFunBuyEvent(): DecodePumpFunBuyEvent {
+  return { programData: "" };
+}
+
+export const DecodePumpFunBuyEvent: MessageFns<DecodePumpFunBuyEvent> = {
+  encode(message: DecodePumpFunBuyEvent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.programData !== "") {
+      writer.uint32(10).string(message.programData);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DecodePumpFunBuyEvent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseDecodePumpFunBuyEvent();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.programData = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): DecodePumpFunBuyEvent {
+    return { programData: isSet(object.programData) ? globalThis.String(object.programData) : "" };
+  },
+
+  toJSON(message: DecodePumpFunBuyEvent): unknown {
+    const obj: any = {};
+    if (message.programData !== "") {
+      obj.programData = message.programData;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<DecodePumpFunBuyEvent>, I>>(base?: I): DecodePumpFunBuyEvent {
+    return DecodePumpFunBuyEvent.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<DecodePumpFunBuyEvent>, I>>(object: I): DecodePumpFunBuyEvent {
+    const message = createBaseDecodePumpFunBuyEvent();
+    message.programData = object.programData ?? "";
+    return message;
+  },
+};
+
+function createBaseRequestPumpFunSwapTokens(): RequestPumpFunSwapTokens {
+  return { mint: "", amount: 0, slippageBps: 0, unitLimit: 0, unitPrice: 0, privateKey: "", txType: "" };
+}
+
+export const RequestPumpFunSwapTokens: MessageFns<RequestPumpFunSwapTokens> = {
+  encode(message: RequestPumpFunSwapTokens, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.mint !== "") {
+      writer.uint32(10).string(message.mint);
+    }
+    if (message.amount !== 0) {
+      writer.uint32(21).float(message.amount);
+    }
+    if (message.slippageBps !== 0) {
+      writer.uint32(24).int32(message.slippageBps);
+    }
+    if (message.unitLimit !== 0) {
+      writer.uint32(32).int32(message.unitLimit);
+    }
+    if (message.unitPrice !== 0) {
+      writer.uint32(40).int32(message.unitPrice);
+    }
+    if (message.privateKey !== "") {
+      writer.uint32(50).string(message.privateKey);
+    }
+    if (message.txType !== "") {
+      writer.uint32(58).string(message.txType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RequestPumpFunSwapTokens {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseRequestPumpFunSwapTokens();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.mint = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 21) {
+            break;
+          }
+
+          message.amount = reader.float();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.slippageBps = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.unitLimit = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.unitPrice = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.privateKey = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.txType = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): RequestPumpFunSwapTokens {
+    return {
+      mint: isSet(object.mint) ? globalThis.String(object.mint) : "",
+      amount: isSet(object.amount) ? globalThis.Number(object.amount) : 0,
+      slippageBps: isSet(object.slippageBps) ? globalThis.Number(object.slippageBps) : 0,
+      unitLimit: isSet(object.unitLimit) ? globalThis.Number(object.unitLimit) : 0,
+      unitPrice: isSet(object.unitPrice) ? globalThis.Number(object.unitPrice) : 0,
+      privateKey: isSet(object.privateKey) ? globalThis.String(object.privateKey) : "",
+      txType: isSet(object.txType) ? globalThis.String(object.txType) : "",
+    };
+  },
+
+  toJSON(message: RequestPumpFunSwapTokens): unknown {
+    const obj: any = {};
+    if (message.mint !== "") {
+      obj.mint = message.mint;
+    }
+    if (message.amount !== 0) {
+      obj.amount = message.amount;
+    }
+    if (message.slippageBps !== 0) {
+      obj.slippageBps = Math.round(message.slippageBps);
+    }
+    if (message.unitLimit !== 0) {
+      obj.unitLimit = Math.round(message.unitLimit);
+    }
+    if (message.unitPrice !== 0) {
+      obj.unitPrice = Math.round(message.unitPrice);
+    }
+    if (message.privateKey !== "") {
+      obj.privateKey = message.privateKey;
+    }
+    if (message.txType !== "") {
+      obj.txType = message.txType;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<RequestPumpFunSwapTokens>, I>>(base?: I): RequestPumpFunSwapTokens {
+    return RequestPumpFunSwapTokens.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<RequestPumpFunSwapTokens>, I>>(object: I): RequestPumpFunSwapTokens {
+    const message = createBaseRequestPumpFunSwapTokens();
+    message.mint = object.mint ?? "";
+    message.amount = object.amount ?? 0;
+    message.slippageBps = object.slippageBps ?? 0;
+    message.unitLimit = object.unitLimit ?? 0;
+    message.unitPrice = object.unitPrice ?? 0;
+    message.privateKey = object.privateKey ?? "";
+    message.txType = object.txType ?? "";
+    return message;
+  },
+};
+
 export type PoolStateService = typeof PoolStateService;
 export const PoolStateService = {
   getPoolState: {
@@ -2328,6 +2556,72 @@ export interface TokensSolanaClient extends Client {
 export const TokensSolanaClient = makeGenericClientConstructor(TokensSolanaService, "TokensSolana") as unknown as {
   new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): TokensSolanaClient;
   service: typeof TokensSolanaService;
+  serviceName: string;
+};
+
+export type PumpFunService = typeof PumpFunService;
+export const PumpFunService = {
+  decodePumpFunBuyEvent: {
+    path: "/PumpFun/decodePumpFunBuyEvent",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: DecodePumpFunBuyEvent) => Buffer.from(DecodePumpFunBuyEvent.encode(value).finish()),
+    requestDeserialize: (value: Buffer) => DecodePumpFunBuyEvent.decode(value),
+    responseSerialize: (value: ResponseRpcOperation) => Buffer.from(ResponseRpcOperation.encode(value).finish()),
+    responseDeserialize: (value: Buffer) => ResponseRpcOperation.decode(value),
+  },
+  swapTokens: {
+    path: "/PumpFun/swapTokens",
+    requestStream: false,
+    responseStream: false,
+    requestSerialize: (value: RequestPumpFunSwapTokens) => Buffer.from(RequestPumpFunSwapTokens.encode(value).finish()),
+    requestDeserialize: (value: Buffer) => RequestPumpFunSwapTokens.decode(value),
+    responseSerialize: (value: ResponseRpcOperation) => Buffer.from(ResponseRpcOperation.encode(value).finish()),
+    responseDeserialize: (value: Buffer) => ResponseRpcOperation.decode(value),
+  },
+} as const;
+
+export interface PumpFunServer extends UntypedServiceImplementation {
+  decodePumpFunBuyEvent: handleUnaryCall<DecodePumpFunBuyEvent, ResponseRpcOperation>;
+  swapTokens: handleUnaryCall<RequestPumpFunSwapTokens, ResponseRpcOperation>;
+}
+
+export interface PumpFunClient extends Client {
+  decodePumpFunBuyEvent(
+    request: DecodePumpFunBuyEvent,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  decodePumpFunBuyEvent(
+    request: DecodePumpFunBuyEvent,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  decodePumpFunBuyEvent(
+    request: DecodePumpFunBuyEvent,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  swapTokens(
+    request: RequestPumpFunSwapTokens,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  swapTokens(
+    request: RequestPumpFunSwapTokens,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+  swapTokens(
+    request: RequestPumpFunSwapTokens,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ResponseRpcOperation) => void,
+  ): ClientUnaryCall;
+}
+
+export const PumpFunClient = makeGenericClientConstructor(PumpFunService, "PumpFun") as unknown as {
+  new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): PumpFunClient;
+  service: typeof PumpFunService;
   serviceName: string;
 };
 

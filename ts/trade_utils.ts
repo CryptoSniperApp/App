@@ -104,6 +104,11 @@ export async function swapTokens({
     if (!decimals) {
         decimals = 9;
     }
+    if (!blockHash || !lastValidBlockHeight) {
+        let block = await connection.getLatestBlockhash();
+        blockHash = block.blockhash;
+        lastValidBlockHeight = block.lastValidBlockHeight;
+    }
 
     let kp = Keypair.fromSecretKey(base58.decode(privKeyWallet));
     let rpcUrl = connection.rpcEndpoint;

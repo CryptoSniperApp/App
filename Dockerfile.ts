@@ -3,7 +3,7 @@ FROM node:alpine
 WORKDIR /app
 
 COPY ts/package.json .
-RUN yarn install
+RUN npm install
 
 COPY ts /app
 COPY .env /app/.env

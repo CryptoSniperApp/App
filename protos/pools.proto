@@ -145,3 +145,24 @@ service TokensSolana {
     rpc decodeMoonshotBuyInstruction(DecodeMoonshotBuyInstructionData) returns (ResponseRpcOperation);
 }
 
+
+
+message DecodePumpFunBuyEvent {
+    string program_data = 1;
+}
+
+
+message RequestPumpFunSwapTokens {
+    string mint = 1;
+    float amount = 2;
+    int32 slippage_bps = 3;
+    int32 unit_limit = 4;
+    int32 unit_price = 5;
+    string private_key = 6;
+    string tx_type = 7;
+}
+
+service PumpFun {
+    rpc decodePumpFunBuyEvent(DecodePumpFunBuyEvent) returns (ResponseRpcOperation);
+    rpc swapTokens(RequestPumpFunSwapTokens) returns (ResponseRpcOperation);
+}

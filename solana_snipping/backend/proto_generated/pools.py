@@ -146,6 +146,22 @@ class DecodeMoonshotBuyInstructionData(betterproto.Message):
     instruction_data: bytes = betterproto.bytes_field(1)
 
 
+@dataclass
+class DecodePumpFunBuyEvent(betterproto.Message):
+    program_data: str = betterproto.string_field(1)
+
+
+@dataclass
+class RequestPumpFunSwapTokens(betterproto.Message):
+    mint: str = betterproto.string_field(1)
+    amount: float = betterproto.float_field(2)
+    slippage_bps: int = betterproto.int32_field(3)
+    unit_limit: int = betterproto.int32_field(4)
+    unit_price: int = betterproto.int32_field(5)
+    private_key: str = betterproto.string_field(6)
+    tx_type: str = betterproto.string_field(7)
+
+
 class PoolStateStub(betterproto.ServiceStub):
     async def get_pool_state(
         self, *, pool_data: bytes = b""
@@ -154,7 +170,7 @@ class PoolStateStub(betterproto.ServiceStub):
         request.pool_data = pool_data
 
         return await self._unary_unary(
-            "/.PoolState/getPoolState",
+            "/PoolState/getPoolState",
             request,
             ResponsePoolStateOperation,
         )
@@ -291,6 +307,46 @@ class TokensSolanaStub(betterproto.ServiceStub):
 
         return await self._unary_unary(
             "/TokensSolana/decodeMoonshotBuyInstruction",
+            request,
+            ResponseRpcOperation,
+        )
+
+
+class PumpFunStub(betterproto.ServiceStub):
+    async def decode_pump_fun_buy_event(
+        self, *, program_data: str = ""
+    ) -> ResponseRpcOperation:
+        request = DecodePumpFunBuyEvent()
+        request.program_data = program_data
+
+        return await self._unary_unary(
+            "/PumpFun/decodePumpFunBuyEvent",
+            request,
+            ResponseRpcOperation,
+        )
+
+    async def swap_tokens(
+        self,
+        *,
+        mint: str = "",
+        amount: float = 0,
+        slippage_bps: int = 0,
+        unit_limit: int = 0,
+        unit_price: int = 0,
+        private_key: str = "",
+        tx_type: str = "",
+    ) -> ResponseRpcOperation:
+        request = RequestPumpFunSwapTokens()
+        request.mint = mint
+        request.amount = amount
+        request.slippage_bps = slippage_bps
+        request.unit_limit = unit_limit
+        request.unit_price = unit_price
+        request.private_key = private_key
+        request.tx_type = tx_type
+
+        return await self._unary_unary(
+            "/PumpFun/swapTokens",
             request,
             ResponseRpcOperation,
         )
