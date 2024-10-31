@@ -19,6 +19,7 @@ services:
         condition: service_healthy
 
     restart: on-failure
+    command: python solana_snipping/backend/solana/copy_trading.py
   
   raydium_microservice:
     build:

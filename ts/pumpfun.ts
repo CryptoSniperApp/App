@@ -34,8 +34,18 @@ export async function decodePumpFunBuyEvent(programData: string) {
     if (args?.data.solAmount) {
         args.data.solAmount = (args?.data.solAmount as any).toNumber()
     }
-    if (args?.data.tokenAmount) {
-        args.data.tokenAmount = (args?.data.tokenAmount as any).toNumber()
+    if (args?.data.virtualSolReserves) {
+        args.data.virtualSolReserves = (args?.data.virtualSolReserves as any).toNumber()
+    }
+    if (args?.data.virtualTokenReserves) {
+        args.data.virtualTokenReserves = (args?.data.virtualTokenReserves as any).toNumber()
+    }
+
+    if (args?.data.realSolReserves) {
+        args.data.realSolReserves = (args?.data.realSolReserves as any).toNumber()
+    }
+    if (args?.data.realTokenReserves) {
+        args.data.realTokenReserves = (args?.data.realTokenReserves as any).toNumber()
     }
     
     return args;
@@ -110,28 +120,30 @@ export async function swap(
 
 const main = async () => {
     let connection = new ConnectionSolanaPool().getConnectionWithProxy();
-    let mintAddress = "3KFqXYXwsSocsLBTKK9thH11bVGRcP2yKxLaC3Vkpump"
-    // let ata = await getAssociatedTokenAccount(
-    //     mintAddress,
-    //     Keypair.fromSecretKey(bs58.decode(process.env.WALLET_MOONSHOT_PRIVATE_KEY as string)).publicKey.toBase58()
-    // )
-    // console.log(ata)
-    // let amount = await getTokenAmountInWallet(
-    //     connection, 
-    //     ata.toBase58()
-    // )
+    let mintAddress = "3X1xVH7rmbuaCyxhqTdWRQaSW62YNpDEP356K94Epump"
+    let mints = [];
+    
+    let ata = await getAssociatedTokenAccount(
+        mintAddress,
+        Keypair.fromSecretKey(bs58.decode(process.env.WALLET_MOONSHOT_PRIVATE_KEY as string)).publicKey.toBase58()
+    )
+    console.log(ata)
+    let amount = await getTokenAmountInWallet(
+        connection, 
+        ata.toBase58()
+    )
     // let amount = 0.0000005
-    // console.log(amount)
-    // let result = await swap(
-    //     connection, 
-    //     process.env.WALLET_MOONSHOT_PRIVATE_KEY as string, 
-    //     "BUY", 
-    //     mintAddress,
-    //     amount,
-    // )
-    // console.log(result)
-    let decoded = await decodePumpFunBuyEvent("vdt/007mYe7dQ5u7DicD8/VNBXs6JjtcwNXeymnolwliNFgHvQOd6WIPCcUAAAAARv+iCk46AAAAvCAET2kopqmFLAvYcz7Of12gwRaEq8sEw0NAQkMoZyShdCBnAAAAAJuB4RsJAAAAI4TtPlXsAgCb1b0fAgAAACPs2vLD7QEA")
-    console.log(decoded)
+    console.log(amount)
+    let result = await swap(
+        connection, 
+        process.env.WALLET_MOONSHOT_PRIVATE_KEY as string, 
+        "SELL", 
+        mintAddress,
+        amount as number,
+    )
+    console.log(result)
+    // let decoded = await decodePumpFunBuyEvent("vdt/007mYe5+EYMs+NYiQBCqW7vPF3IE7XkTkmHbSoYyWwHjuVbZ3wDxU2UAAAAARFdxrVU0AAABav53s3fWDRxdwhmdhiwR7vLhQO4197Iw4t3koFWbJT/6ziFnAAAAAACdd2EHAAAAvLhmmo2bAwAA8VNlAAAAALwgVE78nAIA")
+    // console.log(decoded)
 };
 
 // main();

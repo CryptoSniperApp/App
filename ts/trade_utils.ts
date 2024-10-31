@@ -13,6 +13,8 @@ import { ConnectionSolanaPool } from "./connection_pool";
 import { withTimeout } from "./main";
 import * as anchor from "@coral-xyz/anchor";
 import { base64 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import { swap } from "./pumpfun";
+import * as pumpfun from "pumpdotfun-sdk";
 
 
 export async function getTokenAmountInWallet(
@@ -535,22 +537,34 @@ async function sellAll(connection: Connection, kp: Keypair) {
         }
         if (amount != null && `${amount}` !== "0" && amount < 50_000 * (10 ** decimals)) {
             try {
-                let promise = swapTokens({
+                let promise = swap(
                     connection,
-                    txType: "SELL",
-                    mintAddress: accountInfo.account.data["parsed"]["info"]["mint"],
-                    privKeyWallet: base58.encode(kp.secretKey),
-                    amount: amount / web3.LAMPORTS_PER_SOL,
-                    slippageBps: 500,
-                    microLamports: 50_000,
-                    decimals: 9,
-                    commitment: 'confirmed',
-                    confirmBuyOperation: true,
-                    confirmTransaction: true
-                })
+                    base58.encode(kp.secretKey),
+                    "SELL",
+                    accountInfo.account.data["parsed"]["info"]["mint"],
+                    amount / (10 ** pumpfun.DEFAULT_DECIMALS),
+                    500
+                )
                 promises.push(promise)
             } catch (error) {
-                console.error(error);
+                try {
+                    let promise = swapTokens({
+                        connection,
+                        txType: "SELL",
+                        mintAddress: accountInfo.account.data["parsed"]["info"]["mint"],
+                        privKeyWallet: base58.encode(kp.secretKey),
+                        amount: amount / web3.LAMPORTS_PER_SOL,
+                        slippageBps: 500,
+                        microLamports: 50_000,
+                        decimals: 9,
+                        commitment: 'confirmed',
+                        confirmBuyOperation: true,
+                        confirmTransaction: true
+                    })
+                    promises.push(promise)
+                } catch (error) {
+                    console.error(error);
+                }
             }
         }
         if (`${amount}` !== "0") {
