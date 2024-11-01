@@ -150,7 +150,7 @@ class CopyTrading:
             time = datetime.now()
             decoded = orjson.loads(raw)
             signature = decoded["params"]["result"]["value"]["signature"]
-            if raw.count(wallet) and raw.count(self._pumpfun_utils.program_address) and (raw.count("Buy")):
+            if raw.count(self._pumpfun_utils.program_address) and (raw.count("Buy")):
                 logs = decoded['params']['result']['value']['logs']
                 datas = [i for i in logs if "Program data:" in i]
                 # pprint(logs)
@@ -199,7 +199,8 @@ class CopyTrading:
                             "params": [
                                 {
                                     "mentions": [
-                                        '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+                                        # '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',
+                                        wallet,
                                     ]
                                 },
                                 {
